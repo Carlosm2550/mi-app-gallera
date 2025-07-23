@@ -5,6 +5,7 @@ import { INITIAL_PARTIDOS_CUERDAS, INITIAL_GALLOS } from './constants';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, EyeIcon, EyeOffIcon } from './components/Icons';
 import Modal from './components/Modal';
 import Toaster from './components/Toaster';
+import ConflictModal, { ConflictInfo } from './components/ConflictModal';
 
 
 // --- UTILITY FUNCTIONS ---
@@ -1173,9 +1174,35 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
     )
 }
 
+const loadInitialUsers = (): User[] => {
+    try {
+        const storedUsers = localStorage.getItem('gallera_users');
+        let loadedUsers: User[] = storedUsers ? JSON.parse(storedUsers) : [];
+
+        if (loadedUsers.length === 0) {
+            const adminUser: User = {
+                id: 'admin_carlos',
+                name: 'Carlos',
+                phone: 'N/A',
+                email: 'carlostecontacta@gmail.com',
+                username: 'Carlos',
+                password: 'C09203055',
+                role: 'admin',
+            };
+            loadedUsers.push(adminUser);
+            localStorage.setItem('gallera_users', JSON.stringify(loadedUsers));
+        }
+        return loadedUsers;
+    } catch (error) {
+        console.error("Failed to load users from localStorage:", error);
+        return [];
+    }
+};
+
+
 const App: React.FC = () => {
     // --- AUTH STATE ---
-    const [users, setUsers] = useState<User[]>([]);
+    const [users, setUsers] = useState<User[]>(loadInitialUsers);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -1219,31 +1246,11 @@ const App: React.FC = () => {
 
     // --- EFFECTS FOR PERSISTENCE ---
     useEffect(() => {
-        // Load users from localStorage on initial boot
-        const storedUsers = localStorage.getItem('gallera_users');
-        let loadedUsers: User[] = storedUsers ? JSON.parse(storedUsers) : [];
-
-        // Seed admin if no users exist
-        if (loadedUsers.length === 0) {
-            const adminUser: User = {
-              id: 'admin_carlos',
-              name: 'Carlos',
-              phone: 'N/A',
-              email: 'carlostecontacta@gmail.com',
-              username: 'Carlos',
-              password: 'C09203055',
-              role: 'admin',
-            };
-            loadedUsers.push(adminUser);
-            localStorage.setItem('gallera_users', JSON.stringify(loadedUsers));
-        }
-        setUsers(loadedUsers);
-
         // Check for a logged-in session
         const sessionUser = localStorage.getItem('gallera_session');
         if (sessionUser) {
             const parsedUser = JSON.parse(sessionUser);
-            if (loadedUsers.find(u => u.id === parsedUser.id)) {
+            if (users.find(u => u.id === parsedUser.id)) {
                 setCurrentUser(parsedUser);
                 changeScreen(parsedUser.role === 'admin' ? Screen.ADMIN_DASHBOARD : Screen.SETUP);
             } else {
@@ -1263,7 +1270,12 @@ const App: React.FC = () => {
 
     useEffect(() => {
         // Persist user list changes (add/delete)
-        localStorage.setItem('gallera_users', JSON.stringify(users));
+        try {
+            localStorage.setItem('gallera_users', JSON.stringify(users));
+        } catch (error) {
+            console.error("Failed to save users to localStorage:", error);
+            showNotification("No se pudieron guardar los cambios de usuario.", "error");
+        }
     }, [users]);
     
     // Helper to change screen and scroll to top
