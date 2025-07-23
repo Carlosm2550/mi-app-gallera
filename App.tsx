@@ -1,7 +1,8 @@
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { INITIAL_PARTIDOS_CUERDAS, INITIAL_GALLOS } from './constants';
-import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon } from './components/Icons';
+import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, EyeIcon, EyeOffIcon } from './components/Icons';
 import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
@@ -233,16 +234,43 @@ const Footer: React.FC = () => (
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
 }
-const InputField: React.FC<InputFieldProps> = ({ label, id, ...props }) => {
+const InputField: React.FC<InputFieldProps> = ({ label, id, type, ...props }) => {
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const inputId = id || `input-${label.replace(/\s+/g, '-')}`;
+
+  const isPasswordField = type === 'password';
+
+  const togglePasswordVisibility = () => {
+    setIsPasswordVisible(prev => !prev);
+  };
+
+  const inputType = isPasswordField ? (isPasswordVisible ? 'text' : 'password') : type;
+
   return (
     <div>
       <label htmlFor={inputId} className="block text-sm font-medium text-gray-400 mb-1">{label}</label>
-      <input
-        id={inputId}
-        {...props}
-        className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition disabled:bg-gray-600 disabled:opacity-70"
-      />
+      <div className="relative">
+        <input
+          id={inputId}
+          type={inputType}
+          {...props}
+          className={`w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition disabled:bg-gray-600 disabled:opacity-70 ${isPasswordField ? 'pr-10' : ''}`}
+        />
+        {isPasswordField && (
+          <button
+            type="button"
+            onClick={togglePasswordVisibility}
+            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
+            aria-label={isPasswordVisible ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {isPasswordVisible ? (
+              <EyeOffIcon className="h-5 w-5" />
+            ) : (
+              <EyeIcon className="h-5 w-5" />
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -287,7 +315,7 @@ const SectionCard: React.FC<SectionCardProps> = ({ icon, title, buttonText, onBu
   </div>
 );
 
-const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions: string[][]; setExceptions: (exceptions: string[][]) => void; }> = ({ partidosCuerdas, exceptions, setExceptions }) => {
+const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions: string[][]; setExceptions: (exceptions: string[][]) => void; showNotification: (message: string, type: Notification['type']) => void; }> = ({ partidosCuerdas, exceptions, setExceptions, showNotification }) => {
     const [partido1, setPartido1] = useState('');
     const [partido2, setPartido2] = useState('');
 
@@ -304,6 +332,7 @@ const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions
     
     const handleRemoveException = (index: number) => {
         setExceptions(exceptions.filter((_, i) => i !== index));
+        showNotification('Excepción eliminada.', 'success');
     };
     
     const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
@@ -459,13 +488,11 @@ const SetupScreen: React.FC<{
 
     const handleSavePartidoClick = (partido: PartidoCuerda) => {
         onSavePartido(partido);
-        showNotification('Partido guardado con éxito.', 'success');
         setPartidoModalOpen(false);
     };
 
     const handleSaveGalloClick = (gallo: Omit<Gallo, 'id'>) => {
         onSaveGallo(gallo, currentGallo?.id || null);
-        showNotification('Gallo guardado con éxito.', 'success');
         setGalloModalOpen(false);
     };
 
@@ -562,7 +589,8 @@ const SetupScreen: React.FC<{
                     <ExceptionsManager 
                         partidosCuerdas={partidosCuerdas} 
                         exceptions={torneo.exceptions} 
-                        setExceptions={(newExceptions) => setTorneo(prev => ({ ...prev, exceptions: newExceptions }))} 
+                        setExceptions={(newExceptions) => setTorneo(prev => ({ ...prev, exceptions: newExceptions }))}
+                        showNotification={showNotification}
                     />
                 </SectionCard>
 
@@ -1022,7 +1050,7 @@ const AuthContainer: React.FC<{ title: string, children: React.ReactNode}> = ({ 
         <div className="w-full max-w-md">
             <div className="text-center mb-8">
                  <TrophyIcon className="w-16 h-16 text-amber-400 mx-auto" />
-                 <h1 className="text-4xl font-bold text-white tracking-wider mt-2">GalleraPro</h1>
+                 <h1 className="text-4xl font-bold text-white tracking-wider mt-2">Cotejador de Gallos</h1>
                  <p className="text-gray-400">{title}</p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl p-8 space-y-6">
@@ -1064,7 +1092,7 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
     const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'admin' | 'user'>('user');
+    const [role, setRole] = useState<'admin' | 'user' | 'demo'>('user');
 
     const handleAddUserSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -1105,7 +1133,7 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                                     <td className="px-4 py-3 font-medium text-white">{user.name}</td>
                                     <td className="px-4 py-3">{user.username}</td>
                                     <td className="px-4 py-3">{user.email}</td>
-                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-amber-500 text-black' : 'bg-gray-600'}`}>{user.role}</span></td>
+                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-amber-500 text-black' : user.role === 'demo' ? 'bg-blue-500 text-white' : 'bg-gray-600'}`}>{user.role}</span></td>
                                     <td className="px-4 py-3 text-center">
                                         {user.id !== currentUser.id && (
                                             <button onClick={() => onDeleteUser(user.id)} className="text-red-500 hover:text-red-400 p-1">
@@ -1129,9 +1157,10 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                      <InputField label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                      <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
-                        <select value={role} onChange={e => setRole(e.target.value as 'admin'|'user')} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
+                        <select value={role} onChange={e => setRole(e.target.value as 'admin'|'user'|'demo')} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
                             <option value="user">Usuario</option>
                             <option value="admin">Administrador</option>
+                            <option value="demo">Demo</option>
                         </select>
                      </div>
                      <div className="flex justify-end pt-4 space-x-2">
@@ -1272,9 +1301,9 @@ const App: React.FC = () => {
     
     const handleAdminDeleteUser = (userId: string) => {
         const user = users.find(u => u.id === userId);
-        if (user && window.confirm(`¿Seguro que quieres eliminar a ${user.username}?`)) {
+        if (user) {
             setUsers(prev => prev.filter(u => u.id !== userId));
-            showNotification('Usuario eliminado.', 'success');
+            showNotification(`Usuario '${user.username}' eliminado.`, 'success');
         }
     };
 
@@ -1291,7 +1320,7 @@ const App: React.FC = () => {
 
     const handleDeletePartido = (partidoId: string) => {
         const partido = partidosCuerdas.find(p => p.id === partidoId);
-        if (partido && window.confirm(`¿Seguro que quieres eliminar a "${partido.name}" y todos sus gallos? Esta acción no se puede deshacer.`)) {
+        if (partido) {
             setPartidosCuerdas(prev => prev.filter(p => p.id !== partidoId));
             setGallos(prev => prev.filter(g => g.partidoCuerdaId !== partidoId));
             setTorneo(prev => ({
@@ -1300,11 +1329,16 @@ const App: React.FC = () => {
                     .map(pair => pair.filter(id => id !== partidoId))
                     .filter(pair => pair.length === 2) as string[][]
             }));
-            showNotification('Partido eliminado.', 'success');
+            showNotification(`Partido '${partido.name}' eliminado.`, 'success');
         }
     };
 
     const handleSaveGallo = (galloData: Omit<Gallo, 'id'>, currentGalloId: string | null) => {
+        if (!currentGalloId && currentUser?.role === 'demo' && gallos.length >= 10) {
+            showNotification('Límite de 10 gallos alcanzado para cuentas Demo.', 'error');
+            return;
+        }
+
         setGallos(prev => {
             if (currentGalloId) {
                 return prev.map(g => g.id === currentGalloId ? { ...g, ...galloData } : g);
@@ -1316,9 +1350,9 @@ const App: React.FC = () => {
     
     const handleDeleteGallo = (galloId: string) => {
         const gallo = gallos.find(g => g.id === galloId);
-        if(gallo && window.confirm(`¿Seguro que quieres eliminar a "${gallo.name}"?`)) {
+        if(gallo) {
             setGallos(prev => prev.filter(g => g.id !== galloId));
-            showNotification('Gallo eliminado.', 'success');
+            showNotification(`Gallo '${gallo.name}' eliminado.`, 'success');
         }
     };
 

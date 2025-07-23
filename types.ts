@@ -68,7 +68,7 @@ export interface User {
   email: string;
   username: string;
   password: string; // In a real-world app, this should be a hash.
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'demo';
 }
 
 export interface Notification {
