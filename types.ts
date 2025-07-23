@@ -5,6 +5,7 @@ export enum Screen {
   RESULTS,
   LOGIN,
   ADMIN_DASHBOARD,
+  REGISTER,
 }
 
 export enum PesoUnit {
@@ -17,6 +18,7 @@ export interface PartidoCuerda {
   id: string;
   name: string;
   owner: string;
+  userId?: string;
 }
 
 export interface Gallo {
@@ -27,6 +29,7 @@ export interface Gallo {
   weight: number;
   weightUnit: PesoUnit;
   characteristics: string;
+  userId?: string;
 }
 
 export interface Pelea {
@@ -50,6 +53,7 @@ export interface Torneo {
     pointsForWin: number;
     pointsForDraw: number;
   };
+  userId?: string;
 }
 
 export type PartidoStats = {
@@ -62,12 +66,10 @@ export type PartidoStats = {
 };
 
 export interface User {
-  id: string;
+  id: string; // Firebase UID
   name: string;
   phone: string;
   email: string;
-  username: string;
-  password: string; // In a real-world app, this should be a hash.
   role: 'admin' | 'user' | 'demo';
 }
 

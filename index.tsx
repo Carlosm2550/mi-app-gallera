@@ -1,3 +1,4 @@
+import './firebase'; // Ensures Firebase is initialized first
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';

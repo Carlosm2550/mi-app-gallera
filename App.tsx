@@ -1,11 +1,33 @@
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { INITIAL_PARTIDOS_CUERDAS, INITIAL_GALLOS } from './constants';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, EyeIcon, EyeOffIcon } from './components/Icons';
 import Modal from './components/Modal';
 import Toaster from './components/Toaster';
-import ConflictModal, { ConflictInfo } from './components/ConflictModal';
+
+import { auth, db, firebaseConfig } from './firebase';
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut,
+    getAuth,
+} from "firebase/auth";
+import {
+    doc,
+    setDoc,
+    getDoc,
+    collection,
+    query,
+    where,
+    onSnapshot,
+    writeBatch,
+    addDoc,
+    deleteDoc,
+    getDocs,
+    updateDoc
+} from "firebase/firestore";
+import { initializeApp } from 'firebase/app';
 
 
 // --- UTILITY FUNCTIONS ---
@@ -316,7 +338,7 @@ const SectionCard: React.FC<SectionCardProps> = ({ icon, title, buttonText, onBu
   </div>
 );
 
-const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions: string[][]; setExceptions: (exceptions: string[][]) => void; showNotification: (message: string, type: Notification['type']) => void; }> = ({ partidosCuerdas, exceptions, setExceptions, showNotification }) => {
+const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions: string[][]; onUpdateExceptions: (exceptions: string[][]) => void; showNotification: (message: string, type: Notification['type']) => void; }> = ({ partidosCuerdas, exceptions, onUpdateExceptions, showNotification }) => {
     const [partido1, setPartido1] = useState('');
     const [partido2, setPartido2] = useState('');
 
@@ -324,7 +346,7 @@ const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions
         if (partido1 && partido2 && partido1 !== partido2) {
             const newException = [partido1, partido2].sort();
             if (!exceptions.some(ex => ex[0] === newException[0] && ex[1] === newException[1])) {
-                setExceptions([...exceptions, newException]);
+                onUpdateExceptions([...exceptions, newException]);
             }
             setPartido1('');
             setPartido2('');
@@ -332,7 +354,7 @@ const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions
     };
     
     const handleRemoveException = (index: number) => {
-        setExceptions(exceptions.filter((_, i) => i !== index));
+        onUpdateExceptions(exceptions.filter((_, i) => i !== index));
         showNotification('Excepción eliminada.', 'success');
     };
     
@@ -373,7 +395,7 @@ const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions
         </div>
     );
 };
-const PartidoFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (partido: PartidoCuerda) => void; partido: PartidoCuerda | null; }> = ({ isOpen, onClose, onSave, partido }) => {
+const PartidoFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (partido: Omit<PartidoCuerda, 'id' | 'userId'>) => void; partido: PartidoCuerda | null; }> = ({ isOpen, onClose, onSave, partido }) => {
     const [name, setName] = useState('');
     const [owner, setOwner] = useState('');
 
@@ -386,11 +408,7 @@ const PartidoFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave:
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({
-            id: partido?.id || `p${Date.now()}`,
-            name,
-            owner
-        });
+        onSave({ name, owner });
     };
 
     return (
@@ -406,7 +424,7 @@ const PartidoFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave:
         </Modal>
     );
 }
-const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (gallo: Omit<Gallo, 'id'>) => void; gallo: Gallo | null; partidos: PartidoCuerda[]; globalWeightUnit: PesoUnit; showNotification: (message: string, type: Notification['type']) => void; }> = ({ isOpen, onClose, onSave, gallo, partidos, globalWeightUnit, showNotification }) => {
+const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (gallo: Omit<Gallo, 'id' | 'userId'>) => void; gallo: Gallo | null; partidos: PartidoCuerda[]; globalWeightUnit: PesoUnit; showNotification: (message: string, type: Notification['type']) => void; }> = ({ isOpen, onClose, onSave, gallo, partidos, globalWeightUnit, showNotification }) => {
     const [ringId, setRingId] = useState('');
     const [name, setName] = useState('');
     const [partidoCuerdaId, setPartidoCuerdaId] = useState('');
@@ -473,27 +491,27 @@ const SetupScreen: React.FC<{
     partidosCuerdas: PartidoCuerda[]; 
     gallos: Gallo[]; 
     torneo: Torneo; 
-    setTorneo: React.Dispatch<React.SetStateAction<Torneo>>; 
+    onUpdateTorneo: (updatedTorneo: Torneo) => void;
     onStartMatchmaking: () => void; 
     showNotification: (message: string, type: Notification['type']) => void; 
-    onSavePartido: (partido: PartidoCuerda) => void;
+    onSavePartido: (partidoData: Omit<PartidoCuerda, 'id' | 'userId'>, currentPartidoId: string | null) => void;
     onDeletePartido: (partidoId: string) => void;
-    onSaveGallo: (gallo: Omit<Gallo, 'id'>, currentGalloId: string | null) => void;
+    onSaveGallo: (galloData: Omit<Gallo, 'id' | 'userId'>, currentGalloId: string | null) => void;
     onDeleteGallo: (galloId: string) => void;
-}> = ({ partidosCuerdas, gallos, torneo, setTorneo, onStartMatchmaking, showNotification, onSavePartido, onDeletePartido, onSaveGallo, onDeleteGallo }) => {
+}> = ({ partidosCuerdas, gallos, torneo, onUpdateTorneo, onStartMatchmaking, showNotification, onSavePartido, onDeletePartido, onSaveGallo, onDeleteGallo }) => {
     const [isPartidoModalOpen, setPartidoModalOpen] = useState(false);
     const [isGalloModalOpen, setGalloModalOpen] = useState(false);
     
     const [currentPartido, setCurrentPartido] = useState<PartidoCuerda | null>(null);
     const [currentGallo, setCurrentGallo] = useState<Gallo | null>(null);
 
-    const handleSavePartidoClick = (partido: PartidoCuerda) => {
-        onSavePartido(partido);
+    const handleSavePartidoClick = (partidoData: Omit<PartidoCuerda, 'id'|'userId'>) => {
+        onSavePartido(partidoData, currentPartido?.id || null);
         setPartidoModalOpen(false);
     };
 
-    const handleSaveGalloClick = (gallo: Omit<Gallo, 'id'>) => {
-        onSaveGallo(gallo, currentGallo?.id || null);
+    const handleSaveGalloClick = (galloData: Omit<Gallo, 'id'|'userId'>) => {
+        onSaveGallo(galloData, currentGallo?.id || null);
         setGalloModalOpen(false);
     };
 
@@ -520,19 +538,19 @@ const SetupScreen: React.FC<{
             <div className="grid md:grid-cols-2 gap-8">
                  <SectionCard icon={<SettingsIcon/>} title="Reglas del Torneo">
                     <div className="space-y-4">
-                        <InputField label="Nombre del Torneo" value={torneo.name} onChange={(e) => setTorneo({...torneo, name: e.target.value})} />
+                        <InputField label="Nombre del Torneo" value={torneo.name} onChange={(e) => onUpdateTorneo({...torneo, name: e.target.value})} />
                         <div className="grid grid-cols-2 gap-4">
-                            <InputField type="date" label="Fecha" value={torneo.date} onChange={(e) => setTorneo({...torneo, date: e.target.value})} />
-                            <InputField type="number" label="Tiempo de Pelea (minutos)" value={torneo.fightDuration} onChange={(e) => setTorneo({...torneo, fightDuration: Number(e.target.value)})} />
+                            <InputField type="date" label="Fecha" value={torneo.date} onChange={(e) => onUpdateTorneo({...torneo, date: e.target.value})} />
+                            <InputField type="number" label="Tiempo de Pelea (minutos)" value={torneo.fightDuration} onChange={(e) => onUpdateTorneo({...torneo, fightDuration: Number(e.target.value)})} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                              <div>
                                  <label className="block text-sm font-medium text-gray-400 mb-1">Unidad de Peso Global</label>
-                                 <select value={torneo.weightUnit} onChange={e => setTorneo({...torneo, weightUnit: e.target.value as PesoUnit})} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition">
+                                 <select value={torneo.weightUnit} onChange={e => onUpdateTorneo({...torneo, weightUnit: e.target.value as PesoUnit})} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition">
                                     {Object.values(PesoUnit).map(u => <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>)}
                                  </select>
                              </div>
-                            <InputField type="number" label="Tolerancia (gramos)" value={torneo.weightTolerance} onChange={(e) => setTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
+                            <InputField type="number" label="Tolerancia (gramos)" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
                         </div>
                         <div className="border-t border-gray-700 my-4"></div>
                         <div className="flex items-center justify-between">
@@ -540,13 +558,13 @@ const SetupScreen: React.FC<{
                             <ToggleSwitch
                                 id="rondas-toggle"
                                 checked={torneo.rondas.enabled}
-                                onChange={e => setTorneo(prev => ({ ...prev, rondas: { ...prev.rondas, enabled: e.target.checked } }))}
+                                onChange={e => onUpdateTorneo({ ...torneo, rondas: { ...torneo.rondas, enabled: e.target.checked } })}
                             />
                         </div>
                          {torneo.rondas.enabled && (
                             <div className="grid grid-cols-2 gap-4 pt-2">
-                                <InputField type="number" label="Puntos por Victoria" value={torneo.rondas.pointsForWin} onChange={(e) => setTorneo(prev => ({ ...prev, rondas: { ...prev.rondas, pointsForWin: Number(e.target.value) } }))} />
-                                <InputField type="number" label="Puntos por Empate" value={torneo.rondas.pointsForDraw} onChange={(e) => setTorneo(prev => ({ ...prev, rondas: { ...prev.rondas, pointsForDraw: Number(e.target.value) } }))} />
+                                <InputField type="number" label="Puntos por Victoria" value={torneo.rondas.pointsForWin} onChange={(e) => onUpdateTorneo({ ...torneo, rondas: { ...torneo.rondas, pointsForWin: Number(e.target.value) } })} />
+                                <InputField type="number" label="Puntos por Empate" value={torneo.rondas.pointsForDraw} onChange={(e) => onUpdateTorneo({ ...torneo, rondas: { ...torneo.rondas, pointsForDraw: Number(e.target.value) } })} />
                             </div>
                          )}
                     </div>
@@ -590,7 +608,7 @@ const SetupScreen: React.FC<{
                     <ExceptionsManager 
                         partidosCuerdas={partidosCuerdas} 
                         exceptions={torneo.exceptions} 
-                        setExceptions={(newExceptions) => setTorneo(prev => ({ ...prev, exceptions: newExceptions }))}
+                        onUpdateExceptions={(newExceptions) => onUpdateTorneo({ ...torneo, exceptions: newExceptions })}
                         showNotification={showNotification}
                     />
                 </SectionCard>
@@ -1061,58 +1079,95 @@ const AuthContainer: React.FC<{ title: string, children: React.ReactNode}> = ({ 
     </div>
 )
 
-const LoginScreen: React.FC<{ onLogin: (username: string, pass: string) => void; }> = ({onLogin}) => {
-    const [username, setUsername] = useState('');
+const RegisterScreen: React.FC<{ 
+    onRegister: (name: string, phone: string, email: string, pass: string) => void; 
+    onBackToLogin: () => void;
+}> = ({onRegister, onBackToLogin}) => {
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onLogin(username, password);
+        onRegister(name, phone, email, password);
+    }
+    
+    return(
+        <AuthContainer title="Crear una Cuenta Nueva">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <InputField label="Nombre Completo" id="reg-name" type="text" value={name} onChange={e => setName(e.target.value)} required />
+                <InputField label="Teléfono" id="reg-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} required />
+                <InputField label="Correo Electrónico" id="reg-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                <InputField label="Contraseña" id="reg-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                 <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-4 rounded-lg transition-colors text-lg">
+                    Registrarme
+                </button>
+            </form>
+            <div className="text-center pt-2">
+                <button onClick={onBackToLogin} className="text-sm text-amber-400 hover:underline">
+                    ¿Ya tienes una cuenta? Inicia sesión
+                </button>
+            </div>
+        </AuthContainer>
+    )
+}
+
+const LoginScreen: React.FC<{ onLogin: (email: string, pass: string) => void; onGoToRegister: () => void; }> = ({onLogin, onGoToRegister}) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onLogin(email, password);
     }
     
     return(
         <AuthContainer title="Inicio de Sesión">
             <form onSubmit={handleSubmit} className="space-y-4">
-                <InputField label="Usuario" id="username" value={username} onChange={e => setUsername(e.target.value)} required />
+                <InputField label="Correo Electrónico" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                 <InputField label="Contraseña" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                  <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-4 rounded-lg transition-colors text-lg">
                     Entrar
                 </button>
             </form>
-            <p className="text-center text-sm text-gray-400 font-semibold pt-2">
-                Solo para miembros
-            </p>
+            <div className="text-center text-sm text-gray-400 font-semibold pt-2 space-x-2">
+                 <span>Solo para miembros.</span>
+                 <button onClick={onGoToRegister} className="font-bold text-amber-400 hover:underline">Regístrate</button>
+            </div>
         </AuthContainer>
     )
 }
 
-const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser: (userId: string) => void, onGoToApp: () => void, onAddUser: (user: Omit<User, 'id'>) => void, showNotification: (message: string, type: Notification['type']) => void; }> = ({ users, currentUser, onDeleteUser, onGoToApp, onAddUser, showNotification }) => {
+const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser: (userId: string) => void, onGoToApp: () => void, onAddUser: (user: Omit<User, 'id'>, pass: string) => void; showNotification: (message: string, type: Notification['type']) => void; onLoadDemoData: () => void; }> = ({ users, currentUser, onDeleteUser, onGoToApp, onAddUser, showNotification, onLoadDemoData }) => {
     const [isUserModalOpen, setUserModalOpen] = useState(false);
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
-    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<'admin' | 'user' | 'demo'>('user');
 
     const handleAddUserSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onAddUser({ name, phone, email, username, password, role });
+        onAddUser({ name, phone, email, role }, password);
         setUserModalOpen(false);
         // Reset form
-        setName(''); setPhone(''); setEmail(''); setUsername(''); setPassword(''); setRole('user');
+        setName(''); setPhone(''); setEmail(''); setPassword(''); setRole('user');
     }
 
     return (
         <div className="space-y-8">
             <div className="text-center">
                 <h2 className="text-3xl font-bold text-white">Panel de Administración</h2>
-                <p className="text-gray-400 mt-2">Gestiona los usuarios del sistema.</p>
+                <p className="text-gray-400 mt-2">Gestiona los usuarios y datos del sistema.</p>
             </div>
 
-            <div className="text-center">
-                <button onClick={onGoToApp} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-xl">
+            <div className="flex justify-center space-x-4">
+                <button onClick={onGoToApp} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
                     Ir al Cotejador
+                </button>
+                <button onClick={onLoadDemoData} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                    Cargar Datos de Demostración
                 </button>
             </div>
 
@@ -1122,7 +1177,6 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                         <thead className="bg-gray-700/50 text-xs text-amber-400 uppercase">
                             <tr>
                                 <th className="px-4 py-2">Nombre</th>
-                                <th className="px-4 py-2">Usuario</th>
                                 <th className="px-4 py-2">Email</th>
                                 <th className="px-4 py-2">Rol</th>
                                 <th className="px-4 py-2 text-center">Acciones</th>
@@ -1132,7 +1186,6 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                             {users.map(user => (
                                 <tr key={user.id} className="border-b border-gray-700">
                                     <td className="px-4 py-3 font-medium text-white">{user.name}</td>
-                                    <td className="px-4 py-3">{user.username}</td>
                                     <td className="px-4 py-3">{user.email}</td>
                                     <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-amber-500 text-black' : user.role === 'demo' ? 'bg-blue-500 text-white' : 'bg-gray-600'}`}>{user.role}</span></td>
                                     <td className="px-4 py-3 text-center">
@@ -1154,7 +1207,6 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                      <InputField label="Nombre Completo" value={name} onChange={e => setName(e.target.value)} required />
                      <InputField label="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} />
                      <InputField label="Correo Electrónico" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                     <InputField label="Nombre de Usuario" value={username} onChange={e => setUsername(e.target.value)} required />
                      <InputField label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                      <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
@@ -1174,52 +1226,31 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
     )
 }
 
-const loadInitialUsers = (): User[] => {
-    try {
-        const storedUsers = localStorage.getItem('gallera_users');
-        let loadedUsers: User[] = storedUsers ? JSON.parse(storedUsers) : [];
-
-        if (loadedUsers.length === 0) {
-            const adminUser: User = {
-                id: 'admin_carlos',
-                name: 'Carlos',
-                phone: 'N/A',
-                email: 'carlostecontacta@gmail.com',
-                username: 'Carlos',
-                password: 'C09203055',
-                role: 'admin',
-            };
-            loadedUsers.push(adminUser);
-            localStorage.setItem('gallera_users', JSON.stringify(loadedUsers));
-        }
-        return loadedUsers;
-    } catch (error) {
-        console.error("Failed to load users from localStorage:", error);
-        return [];
-    }
+const DEFAULT_TORNEO: Torneo = {
+    name: 'Torneo Anual de la Candelaria',
+    date: new Date().toISOString().split('T')[0],
+    weightTolerance: 60,
+    fightDuration: 10,
+    weightUnit: PesoUnit.GRAMS,
+    rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
+    exceptions: [],
 };
 
 
 const App: React.FC = () => {
     // --- AUTH STATE ---
-    const [users, setUsers] = useState<User[]>(loadInitialUsers);
+    const [users, setUsers] = useState<User[]>([]); // All users, for admin panel
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // --- MAIN APP STATE ---
+    // --- MAIN APP STATE (DATA FROM FIRESTORE) ---
     const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
-    const [torneo, setTorneo] = useState<Torneo>({
-        name: 'Torneo Anual de la Candelaria',
-        date: new Date().toISOString().split('T')[0],
-        weightTolerance: 60,
-        fightDuration: 10,
-        weightUnit: PesoUnit.GRAMS,
-        rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
-        exceptions: [],
-    });
-    const [partidosCuerdas, setPartidosCuerdas] = useState<PartidoCuerda[]>(INITIAL_PARTIDOS_CUERDAS);
-    const [gallos, setGallos] = useState<Gallo[]>(INITIAL_GALLOS);
+    const [torneo, setTorneo] = useState<Torneo>(DEFAULT_TORNEO);
+    const [partidosCuerdas, setPartidosCuerdas] = useState<PartidoCuerda[]>([]);
+    const [gallos, setGallos] = useState<Gallo[]>([]);
     
+    // --- MATCHMAKING & FIGHT STATE (LOCAL) ---
     const [peleas, setPeleas] = useState<Pelea[]>([]);
     const [peleasIndividuales, setPeleasIndividuales] = useState<Pelea[]>([]);
     const [unpairedRoosters, setUnpairedRoosters] = useState<Gallo[]>([]);
@@ -1243,40 +1274,118 @@ const App: React.FC = () => {
         setNotifications(prev => prev.filter(n => n.id !== id));
     };
 
-
-    // --- EFFECTS FOR PERSISTENCE ---
+    // --- FIREBASE EFFECTS ---
     useEffect(() => {
-        // Check for a logged-in session
-        const sessionUser = localStorage.getItem('gallera_session');
-        if (sessionUser) {
-            const parsedUser = JSON.parse(sessionUser);
-            if (users.find(u => u.id === parsedUser.id)) {
-                setCurrentUser(parsedUser);
-                changeScreen(parsedUser.role === 'admin' ? Screen.ADMIN_DASHBOARD : Screen.SETUP);
-            } else {
-                localStorage.removeItem('gallera_session');
+        const setupAdmin = async () => {
+            const usersRef = collection(db, "users");
+            const adminQuery = query(usersRef, where("role", "==", "admin"));
+            const adminSnapshot = await getDocs(adminQuery);
+    
+            if (adminSnapshot.empty) {
+                console.log("No admin found, creating one...");
+                const adminEmail = "carlostecontacta@gmail.com";
+                const adminPassword = "C09203055";
+                
+                const tempApp = initializeApp(firebaseConfig, `admin-setup-${Date.now()}`);
+                const tempAuth = getAuth(tempApp);
+                
+                try {
+                    const userCredential = await createUserWithEmailAndPassword(tempAuth, adminEmail, adminPassword);
+                    const adminUser = userCredential.user;
+    
+                    const adminData: Omit<User, 'id'> = {
+                        name: "Carlos",
+                        phone: "3197633335",
+                        email: adminEmail,
+                        role: 'admin',
+                    };
+                    
+                    await setDoc(doc(db, "users", adminUser.uid), adminData);
+                    console.log("Admin account created successfully.");
+    
+                } catch (error: any) {
+                    if (error.code !== 'auth/email-already-in-use') {
+                        console.error("Error creating admin user:", error);
+                    }
+                }
             }
-        }
+        };
+    
+        setupAdmin();
     }, []);
 
     useEffect(() => {
-        // Persist current user session
-        if (currentUser) {
-            localStorage.setItem('gallera_session', JSON.stringify(currentUser));
-        } else {
-            localStorage.removeItem('gallera_session');
-        }
-    }, [currentUser]);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (userDocSnap.exists()) {
+                    const userData = { id: user.uid, ...userDocSnap.data() } as User;
+                    setCurrentUser(userData);
+                    changeScreen(userData.role === 'admin' ? Screen.ADMIN_DASHBOARD : Screen.SETUP);
+                } else {
+                    console.error("User profile not found in Firestore.");
+                    await signOut(auth); // Log out if profile is missing
+                }
+            } else {
+                setCurrentUser(null);
+                // Clear all data when logged out
+                setTorneo(DEFAULT_TORNEO);
+                setPartidosCuerdas([]);
+                setGallos([]);
+                changeScreen(Screen.LOGIN);
+            }
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
-        // Persist user list changes (add/delete)
-        try {
-            localStorage.setItem('gallera_users', JSON.stringify(users));
-        } catch (error) {
-            console.error("Failed to save users to localStorage:", error);
-            showNotification("No se pudieron guardar los cambios de usuario.", "error");
+        if (!currentUser) return;
+    
+        // Subscribe to Torneo data
+        const torneoDocRef = doc(db, "torneos", currentUser.id);
+        const unsubTorneo = onSnapshot(torneoDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setTorneo(docSnap.data() as Torneo);
+            } else {
+                // If no tournament settings exist for user, create with default
+                setDoc(torneoDocRef, { ...DEFAULT_TORNEO, userId: currentUser.id });
+            }
+        });
+    
+        // Subscribe to Partidos
+        const partidosQuery = query(collection(db, "partidos"), where("userId", "==", currentUser.id));
+        const unsubPartidos = onSnapshot(partidosQuery, (snapshot) => {
+            const partidosData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PartidoCuerda[];
+            setPartidosCuerdas(partidosData);
+        });
+    
+        // Subscribe to Gallos
+        const gallosQuery = query(collection(db, "gallos"), where("userId", "==", currentUser.id));
+        const unsubGallos = onSnapshot(gallosQuery, (snapshot) => {
+            const gallosData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Gallo[];
+            setGallos(gallosData);
+        });
+
+        // Fetch all users for admin panel
+        if (currentUser.role === 'admin') {
+            const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+                const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as User[];
+                setUsers(allUsers);
+            });
+            return () => { unsubTorneo(); unsubPartidos(); unsubGallos(); unsubUsers(); };
         }
-    }, [users]);
+    
+        // Cleanup function
+        return () => {
+            unsubTorneo();
+            unsubPartidos();
+            unsubGallos();
+        };
+    }, [currentUser]);
+
     
     // Helper to change screen and scroll to top
     const changeScreen = (screen: Screen) => {
@@ -1285,89 +1394,190 @@ const App: React.FC = () => {
     };
 
     // --- AUTH HANDLERS ---
-    const handleLogin = (username: string, pass: string) => {
-        const user = users.find(u => u.username === username && u.password === pass);
-        if (user) {
-            setCurrentUser(user);
-            changeScreen(user.role === 'admin' ? Screen.ADMIN_DASHBOARD : Screen.SETUP);
-            showNotification(`¡Bienvenido de nuevo, ${user.name}!`, 'success');
-        } else {
-            showNotification("Usuario o contraseña incorrectos.", 'error');
+    const handleLogin = async (email: string, pass: string) => {
+        try {
+            await signInWithEmailAndPassword(auth, email, pass);
+            // onAuthStateChanged will handle the rest
+        } catch (error: any) {
+            showNotification("Email o contraseña incorrectos.", 'error');
+            console.error(error);
         }
     };
 
-    const handleLogout = () => {
-        setCurrentUser(null);
-        changeScreen(Screen.LOGIN);
+    const handleRegister = async (name: string, phone: string, email: string, pass: string) => {
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+            const newUser = userCredential.user;
+    
+            const userData: Omit<User, 'id'> = {
+                name,
+                phone,
+                email,
+                role: 'user' // New users are always 'user' role
+            };
+    
+            await setDoc(doc(db, "users", newUser.uid), userData);
+            // onAuthStateChanged will handle the login and screen change automatically.
+            showNotification("¡Registro exitoso! Ahora estás conectado.", "success");
+    
+        } catch (error: any) {
+            if (error.code === 'auth/email-already-in-use') {
+                showNotification('El correo electrónico ya está en uso.', 'error');
+            } else if (error.code === 'auth/weak-password') {
+                showNotification('La contraseña debe tener al menos 6 caracteres.', 'error');
+            }
+            else {
+                showNotification('Error al registrarse.', 'error');
+            }
+            console.error("Error registering user:", error);
+        }
+    };
+
+    const handleLogout = async () => {
+        await signOut(auth);
+        // onAuthStateChanged will handle the rest
     };
 
     // --- ADMIN & DATA HANDLERS ---
-    const handleAdminAddUser = (newUser: Omit<User, 'id'>) => {
-         if(users.some(u => u.username === newUser.username)) {
-            showNotification('El nombre de usuario ya existe.', 'error');
-            return;
+    const handleAdminAddUser = async (newUser: Omit<User, 'id'>, password: string) => {
+        // Create a temporary secondary app to create a user without logging out the admin
+        const tempApp = initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
+        const tempAuth = getAuth(tempApp);
+
+        try {
+            const userCredential = await createUserWithEmailAndPassword(tempAuth, newUser.email, password);
+            const newFirebaseUser = userCredential.user;
+            
+            // Now save the user profile in Firestore using the main app's db instance
+            await setDoc(doc(db, "users", newFirebaseUser.uid), {
+                ...newUser,
+                id: newFirebaseUser.uid
+            });
+            
+            showNotification('Usuario añadido con éxito.', 'success');
+        } catch (error: any) {
+             if (error.code === 'auth/email-already-in-use') {
+                showNotification('El correo electrónico ya está en uso.', 'error');
+            } else {
+                showNotification('Error al crear usuario.', 'error');
+            }
+            console.error("Error creating user:", error);
         }
-        setUsers(prev => [...prev, { ...newUser, id: `user_${Date.now()}` }]);
-        showNotification('Usuario añadido con éxito.', 'success');
     };
     
-    const handleAdminDeleteUser = (userId: string) => {
-        const user = users.find(u => u.id === userId);
-        if (user) {
-            setUsers(prev => prev.filter(u => u.id !== userId));
-            showNotification(`Usuario '${user.username}' eliminado.`, 'success');
+    const handleAdminDeleteUser = async (userId: string) => {
+        // Note: Deleting a user from Auth requires the Admin SDK (backend).
+        // This will only delete them from the Firestore database.
+        try {
+            await deleteDoc(doc(db, "users", userId));
+            showNotification(`Usuario eliminado de la base de datos.`, 'success');
+        } catch (error) {
+            showNotification("Error al eliminar el usuario.", 'error');
+            console.error("Error deleting user doc:", error);
         }
     };
 
-    const handleSavePartido = (partido: PartidoCuerda) => {
-        setPartidosCuerdas(prev => {
-            const exists = prev.some(p => p.id === partido.id);
-            if (exists) {
-                return prev.map(p => p.id === partido.id ? partido : p);
-            }
-            return [...prev, partido];
-        });
-        showNotification('Partido guardado con éxito.', 'success');
+    const handleUpdateTorneo = async (updatedTorneo: Torneo) => {
+        if (!currentUser) return;
+        const torneoDocRef = doc(db, "torneos", currentUser.id);
+        await setDoc(torneoDocRef, updatedTorneo, { merge: true });
     };
 
-    const handleDeletePartido = (partidoId: string) => {
+    const handleSavePartido = async (partidoData: Omit<PartidoCuerda, 'id' | 'userId'>, currentPartidoId: string | null) => {
+        if (!currentUser) return;
+        try {
+            if (currentPartidoId) {
+                await updateDoc(doc(db, "partidos", currentPartidoId), partidoData);
+            } else {
+                await addDoc(collection(db, "partidos"), { ...partidoData, userId: currentUser.id });
+            }
+            showNotification('Partido guardado con éxito.', 'success');
+        } catch (error) {
+            showNotification('Error al guardar el partido.', 'error');
+            console.error(error);
+        }
+    };
+
+    const handleDeletePartido = async (partidoId: string) => {
+        if (!currentUser) return;
         const partido = partidosCuerdas.find(p => p.id === partidoId);
         if (partido) {
-            setPartidosCuerdas(prev => prev.filter(p => p.id !== partidoId));
-            setGallos(prev => prev.filter(g => g.partidoCuerdaId !== partidoId));
-            setTorneo(prev => ({
-                ...prev,
-                exceptions: prev.exceptions
+            try {
+                const batch = writeBatch(db);
+                // Delete the partido
+                batch.delete(doc(db, "partidos", partidoId));
+                // Find and delete associated gallos
+                const gallosToDeleteQuery = query(collection(db, "gallos"), where("userId", "==", currentUser.id), where("partidoCuerdaId", "==", partidoId));
+                const gallosToDeleteSnapshot = await getDocs(gallosToDeleteQuery);
+                gallosToDeleteSnapshot.forEach(galloDoc => batch.delete(galloDoc.ref));
+                // Update exceptions in torneo
+                const updatedExceptions = torneo.exceptions
                     .map(pair => pair.filter(id => id !== partidoId))
-                    .filter(pair => pair.length === 2) as string[][]
-            }));
-            showNotification(`Partido '${partido.name}' eliminado.`, 'success');
+                    .filter(pair => pair.length === 2) as string[][];
+                batch.update(doc(db, "torneos", currentUser.id), { exceptions: updatedExceptions });
+                
+                await batch.commit();
+                showNotification(`Partido '${partido.name}' y sus gallos eliminados.`, 'success');
+            } catch (error) {
+                showNotification('Error al eliminar el partido.', 'error');
+                console.error(error);
+            }
         }
     };
 
-    const handleSaveGallo = (galloData: Omit<Gallo, 'id'>, currentGalloId: string | null) => {
+    const handleSaveGallo = async (galloData: Omit<Gallo, 'id'|'userId'>, currentGalloId: string | null) => {
+        if (!currentUser) return;
         if (!currentGalloId && currentUser?.role === 'demo' && gallos.length >= 10) {
             showNotification('Límite de 10 gallos alcanzado para cuentas Demo.', 'error');
             return;
         }
 
-        setGallos(prev => {
-            if (currentGalloId) {
-                return prev.map(g => g.id === currentGalloId ? { ...g, ...galloData } : g);
+        try {
+             if (currentGalloId) {
+                await updateDoc(doc(db, "gallos", currentGalloId), galloData);
+            } else {
+                await addDoc(collection(db, "gallos"), { ...galloData, userId: currentUser.id });
             }
-            return [...prev, { ...galloData, id: `g${Date.now()}` }];
-        });
-        showNotification('Gallo guardado con éxito.', 'success');
+            showNotification('Gallo guardado con éxito.', 'success');
+        } catch (error) {
+            showNotification('Error al guardar el gallo.', 'error');
+            console.error(error);
+        }
     };
     
-    const handleDeleteGallo = (galloId: string) => {
+    const handleDeleteGallo = async (galloId: string) => {
         const gallo = gallos.find(g => g.id === galloId);
         if(gallo) {
-            setGallos(prev => prev.filter(g => g.id !== galloId));
+            await deleteDoc(doc(db, "gallos", galloId));
             showNotification(`Gallo '${gallo.name}' eliminado.`, 'success');
         }
     };
 
+    const handleLoadDemoData = async () => {
+        if (!currentUser) return;
+
+        const batch = writeBatch(db);
+
+        // Add demo partidos
+        INITIAL_PARTIDOS_CUERDAS.forEach(partido => {
+            const docRef = doc(collection(db, "partidos"));
+            batch.set(docRef, { ...partido, id: docRef.id, userId: currentUser.id });
+        });
+
+        // Add demo gallos
+        INITIAL_GALLOS.forEach(gallo => {
+            const docRef = doc(collection(db, "gallos"));
+            batch.set(docRef, { ...gallo, id: docRef.id, userId: currentUser.id });
+        });
+
+        try {
+            await batch.commit();
+            showNotification("Datos de demostración cargados exitosamente.", "success");
+        } catch (error) {
+            showNotification("Error al cargar los datos de demostración.", "error");
+            console.error("Error loading demo data:", error);
+        }
+    };
 
     // --- MAIN APP LOGIC ---
     const handleStartMatchmaking = useCallback(() => {
@@ -1476,20 +1686,10 @@ const App: React.FC = () => {
     };
 
     const resetTournament = () => {
-        setTorneo({
-            name: 'Torneo Anual de la Candelaria',
-            date: new Date().toISOString().split('T')[0],
-            weightTolerance: 60,
-            fightDuration: 10,
-            weightUnit: PesoUnit.GRAMS,
-            rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
-            exceptions: [],
-        });
+        setTorneo(DEFAULT_TORNEO);
         setPeleas([]);
         setPeleasIndividuales([]);
         setUnpairedRoosters([]);
-        setGallos(INITIAL_GALLOS);
-        setPartidosCuerdas(INITIAL_PARTIDOS_CUERDAS);
         setMatchmakingNote('');
         setTournamentMetrics(null);
         setIndividualMatchFailureReason(null);
@@ -1518,13 +1718,13 @@ const App: React.FC = () => {
     const renderMainApp = () => {
         switch (currentScreen) {
             case Screen.ADMIN_DASHBOARD:
-                return <AdminDashboard users={users} currentUser={currentUser!} onDeleteUser={handleAdminDeleteUser} onGoToApp={() => changeScreen(Screen.SETUP)} onAddUser={handleAdminAddUser} showNotification={showNotification} />;
+                return <AdminDashboard users={users} currentUser={currentUser!} onDeleteUser={handleAdminDeleteUser} onGoToApp={() => changeScreen(Screen.SETUP)} onAddUser={handleAdminAddUser} showNotification={showNotification} onLoadDemoData={handleLoadDemoData} />;
             case Screen.SETUP:
                 return <SetupScreen 
                     partidosCuerdas={partidosCuerdas} 
                     gallos={gallos} 
                     torneo={torneo} 
-                    setTorneo={setTorneo} 
+                    onUpdateTorneo={handleUpdateTorneo} 
                     onStartMatchmaking={handleStartMatchmaking} 
                     showNotification={showNotification}
                     onSavePartido={handleSavePartido}
@@ -1546,7 +1746,7 @@ const App: React.FC = () => {
                     partidosCuerdas={partidosCuerdas} 
                     gallos={gallos} 
                     torneo={torneo} 
-                    setTorneo={setTorneo} 
+                    onUpdateTorneo={handleUpdateTorneo} 
                     onStartMatchmaking={handleStartMatchmaking} 
                     showNotification={showNotification}
                     onSavePartido={handleSavePartido}
@@ -1560,11 +1760,21 @@ const App: React.FC = () => {
     const renderAuthScreens = () => {
          switch (currentScreen) {
             case Screen.LOGIN:
-                return <LoginScreen onLogin={handleLogin} />;
+                return <LoginScreen onLogin={handleLogin} onGoToRegister={() => changeScreen(Screen.REGISTER)} />;
+            case Screen.REGISTER:
+                return <RegisterScreen onRegister={handleRegister} onBackToLogin={() => changeScreen(Screen.LOGIN)} />;
             default:
                 // If somehow on a non-auth screen while logged out, force login
-                return <LoginScreen onLogin={handleLogin} />;
+                return <LoginScreen onLogin={handleLogin} onGoToRegister={() => changeScreen(Screen.REGISTER)} />;
         }
+    }
+
+    if (isLoading) {
+        return (
+             <div className="swirl-bg min-h-screen text-gray-200 flex items-center justify-center">
+                <TrophyIcon className="w-16 h-16 text-amber-400 animate-pulse" />
+            </div>
+        )
     }
 
     return (

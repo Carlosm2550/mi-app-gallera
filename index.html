@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -20,19 +19,22 @@
           radial-gradient(at 82% 65%, hsl(215.00, 19%, 17%) 0, transparent 55%);
       }
     </style>
+    <!-- El "link" a index.css puede o no ser necesario dependiendo de la configuración de Vite, pero no hace daño -->
+    <link rel="stylesheet" href="/index.css">
   <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.1.0",
     "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
-    "react/": "https://esm.sh/react@^19.1.0/"
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "firebase/": "https://esm.sh/firebase@^12.0.0/"
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <!-- Vite inyectará aquí automáticamente tu JavaScript compilado. -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
