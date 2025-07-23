@@ -1,0 +1,6 @@
+{
+  "name": "GalleraPro - Cotejador de Peleas",
+  "description": "Una aplicación web para gestionar de forma integral todos los aspectos de un torneo de peleas de gallos. Permite crear torneos, registrar partidos y gallos, generar peleas con un algoritmo de cotejo avanzado y gestionar los combates en tiempo real.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
