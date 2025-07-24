@@ -1574,10 +1574,6 @@ const App: React.FC = () => {
 
     const handleSaveGallo = async (galloData: Omit<Gallo, 'id'|'userId'>, currentGalloId: string | null) => {
         if (!currentUser) return;
-        if (!currentGalloId && currentUser?.role === 'demo' && gallos.length >= 10) {
-            showNotification('Límite de 10 gallos alcanzado para cuentas Demo.', 'error');
-            return;
-        }
 
         try {
              if (currentGalloId) {
