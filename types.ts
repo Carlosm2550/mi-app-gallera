@@ -5,7 +5,6 @@ export enum Screen {
   RESULTS,
   LOGIN,
   ADMIN_DASHBOARD,
-  REGISTER,
 }
 
 export enum PesoUnit {

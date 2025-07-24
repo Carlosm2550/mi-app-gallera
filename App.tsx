@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
-import { INITIAL_PARTIDOS_CUERDAS, INITIAL_GALLOS } from './constants';
-import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, EyeIcon, EyeOffIcon } from './components/Icons';
+import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
 import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
@@ -230,16 +229,16 @@ interface HeaderProps {
 }
 const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, onGoToAdmin }) => (
     <header className="bg-gray-900/50 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
             <div className="flex items-center space-x-3">
                 <TrophyIcon className="w-8 h-8 text-amber-400" />
-                <h1 className="text-2xl font-bold text-white tracking-wider">GalleraPro</h1>
+                <h1 className="text-xl md:text-2xl font-bold text-white tracking-wider">GalleraPro</h1>
             </div>
             {currentUser && (
-                <div className="flex items-center space-x-4">
-                    <span className="text-gray-300">Bienvenido, <span className="font-bold text-amber-400">{currentUser.name}</span></span>
+                <div className="flex items-center space-x-2 sm:space-x-4">
+                    <span className="text-gray-300 text-sm sm:text-base">Bienvenido, <span className="font-bold text-amber-400">{currentUser.name.split(' ')[0]}</span></span>
                     {currentUser.role === 'admin' && (
-                        <button onClick={onGoToAdmin} className="text-sm text-blue-400 hover:underline">Admin Panel</button>
+                        <button onClick={onGoToAdmin} className="text-sm text-blue-400 hover:underline">Admin</button>
                     )}
                     <button onClick={onLogout} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Salir</button>
                 </div>
@@ -318,16 +317,16 @@ interface SectionCardProps {
   children: React.ReactNode;
 }
 const SectionCard: React.FC<SectionCardProps> = ({ icon, title, buttonText, onButtonClick, children }) => (
-  <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-6">
+  <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 sm:p-6">
     <div className="flex justify-between items-center mb-4">
       <div className="flex items-center space-x-3">
         <div className="text-amber-400 w-6 h-6">{icon}</div>
-        <h3 className="text-xl font-bold text-white">{title}</h3>
+        <h3 className="text-lg sm:text-xl font-bold text-white">{title}</h3>
       </div>
       {buttonText && onButtonClick && (
         <button
           onClick={onButtonClick}
-          className="flex items-center space-x-2 bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-4 rounded-lg transition-colors"
+          className="flex items-center space-x-2 bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base"
         >
           <PlusIcon className="w-5 h-5" />
           <span>{buttonText}</span>
@@ -362,23 +361,23 @@ const ExceptionsManager: React.FC<{ partidosCuerdas: PartidoCuerda[]; exceptions
 
     return (
         <div className="space-y-4">
-            <div className="flex items-end gap-2">
-                <div className="flex-1">
+            <div className="flex flex-col sm:flex-row items-end gap-2">
+                <div className="flex-1 w-full">
                     <label className="text-xs text-gray-400">Equipo 1</label>
                     <select value={partido1} onChange={e => setPartido1(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition">
                         <option value="">Seleccionar...</option>
                         {partidosCuerdas.filter(p => p.id !== partido2).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 w-full">
                     <label className="text-xs text-gray-400">Equipo 2</label>
                     <select value={partido2} onChange={e => setPartido2(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition">
                         <option value="">Seleccionar...</option>
                         {partidosCuerdas.filter(p => p.id !== partido1).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                 </div>
-                <button onClick={handleAddException} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold p-2 rounded-lg transition-colors disabled:bg-gray-600" disabled={!partido1 || !partido2 || partido1 === partido2}>
-                    <PlusIcon className="w-5 h-5" />
+                <button onClick={handleAddException} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold p-2 rounded-lg transition-colors disabled:bg-gray-600 w-full sm:w-auto">
+                    <PlusIcon className="w-5 h-5 mx-auto" />
                 </button>
             </div>
             <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
@@ -453,7 +452,7 @@ const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={gallo ? 'Editar Gallo' : 'Añadir Gallo'}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <InputField label="ID del Anillo" value={ringId} onChange={e => setRingId(e.target.value)} required />
                     <InputField label="Nombre del Gallo" value={name} onChange={e => setName(e.target.value)} required />
                 </div>
@@ -529,32 +528,32 @@ const SetupScreen: React.FC<{
     }, [gallos, partidosCuerdas]);
 
     return (
-        <div className="space-y-12">
+        <div className="space-y-8">
             <div className="text-center">
-                <h2 className="text-3xl font-bold text-white">Configuración del Torneo</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">Configuración del Torneo</h2>
                 <p className="text-gray-400 mt-2">Define las reglas y gestiona los participantes antes de iniciar.</p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                  <SectionCard icon={<SettingsIcon/>} title="Reglas del Torneo">
                     <div className="space-y-4">
                         <InputField label="Nombre del Torneo" value={torneo.name} onChange={(e) => onUpdateTorneo({...torneo, name: e.target.value})} />
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <InputField type="date" label="Fecha" value={torneo.date} onChange={(e) => onUpdateTorneo({...torneo, date: e.target.value})} />
-                            <InputField type="number" label="Tiempo de Pelea (minutos)" value={torneo.fightDuration} onChange={(e) => onUpdateTorneo({...torneo, fightDuration: Number(e.target.value)})} />
+                            <InputField type="number" label="Tiempo de Pelea (min)" value={torneo.fightDuration} onChange={(e) => onUpdateTorneo({...torneo, fightDuration: Number(e.target.value)})} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                              <div>
-                                 <label className="block text-sm font-medium text-gray-400 mb-1">Unidad de Peso Global</label>
+                                 <label className="block text-sm font-medium text-gray-400 mb-1">Unidad de Peso</label>
                                  <select value={torneo.weightUnit} onChange={e => onUpdateTorneo({...torneo, weightUnit: e.target.value as PesoUnit})} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition">
                                     {Object.values(PesoUnit).map(u => <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>)}
                                  </select>
                              </div>
-                            <InputField type="number" label="Tolerancia (gramos)" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
+                            <InputField type="number" label="Tolerancia (g)" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
                         </div>
                         <div className="border-t border-gray-700 my-4"></div>
                         <div className="flex items-center justify-between">
-                            <label htmlFor="rondas-toggle" className="text-white font-medium">Activar cotejo por aporte de equipo</label>
+                            <label htmlFor="rondas-toggle" className="text-white font-medium text-sm sm:text-base">Cotejo por aporte de equipo</label>
                             <ToggleSwitch
                                 id="rondas-toggle"
                                 checked={torneo.rondas.enabled}
@@ -580,17 +579,17 @@ const SetupScreen: React.FC<{
                                 </h4>
                                 <div className="space-y-2">
                                     {gallosInGroup.map(g => (
-                                        <div key={g.id} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
+                                        <div key={g.id} className="flex justify-between items-center bg-gray-700/50 p-2 sm:p-3 rounded-lg">
                                             <div>
-                                                <p className="font-semibold text-white">{g.name} <span className="text-xs text-gray-400 font-normal">({g.ringId})</span></p>
+                                                <p className="font-semibold text-white text-sm sm:text-base">{g.name} <span className="text-xs text-gray-400 font-normal">({g.ringId})</span></p>
                                             </div>
-                                            <div className="flex items-center space-x-2">
-                                                <span className="font-mono text-sm bg-gray-800 px-2 py-1 rounded">{formatWeight(g, torneo.weightUnit)}</span>
+                                            <div className="flex items-center space-x-1 sm:space-x-2">
+                                                <span className="font-mono text-xs sm:text-sm bg-gray-800 px-2 py-1 rounded">{formatWeight(g, torneo.weightUnit)}</span>
                                                 <button onClick={() => { setCurrentGallo(g); setGalloModalOpen(true); }} className="text-gray-400 hover:text-amber-400 transition-colors p-1">
-                                                    <PencilIcon className="w-5 h-5"/>
+                                                    <PencilIcon className="w-4 h-4 sm:w-5 sm:h-5"/>
                                                 </button>
                                                 <button onClick={() => onDeleteGallo(g.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
-                                                    <TrashIcon className="w-5 h-5"/>
+                                                    <TrashIcon className="w-4 h-4 sm:w-5 sm:h-5"/>
                                                 </button>
                                             </div>
                                         </div>
@@ -602,7 +601,7 @@ const SetupScreen: React.FC<{
                 </SectionCard>
             </div>
             
-            <div className="grid lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <SectionCard icon={<UsersIcon/>} title="Excepciones (Compadres)">
                     <p className="text-sm text-gray-400 mb-4">Define pares de equipos que no deben enfrentarse entre sí.</p>
                     <ExceptionsManager 
@@ -636,7 +635,7 @@ const SetupScreen: React.FC<{
                 <button 
                     onClick={onStartMatchmaking} 
                     disabled={activeRoostersCount < 2}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-10 rounded-lg transition-all text-xl shadow-lg disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105"
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 sm:py-4 sm:px-10 rounded-lg transition-all text-lg sm:text-xl shadow-lg disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105"
                 >
                     <span className="flex items-center justify-center space-x-3">
                         <PlayIcon className="w-6 h-6"/>
@@ -676,15 +675,15 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
             </div>
             <div className="w-full grid grid-cols-11 items-center gap-2">
                 <div className="col-span-5 text-right">
-                    <p className="font-bold text-white truncate">{pelea.roosterA.name}</p>
-                    <p className="text-sm text-gray-400 truncate">{getPartido(pelea.roosterA.partidoCuerdaId)?.name}</p>
+                    <p className="font-bold text-white truncate text-sm sm:text-base">{pelea.roosterA.name}</p>
+                    <p className="text-xs sm:text-sm text-gray-400 truncate">{getPartido(pelea.roosterA.partidoCuerdaId)?.name}</p>
                 </div>
-                <div className="col-span-1 text-center font-extrabold text-red-500 text-2xl">
+                <div className="col-span-1 text-center font-extrabold text-red-500 text-xl sm:text-2xl">
                     VS
                 </div>
                 <div className="col-span-5 text-left">
-                    <p className="font-bold text-white truncate">{pelea.roosterB.name}</p>
-                    <p className="text-sm text-gray-400 truncate">{getPartido(pelea.roosterB.partidoCuerdaId)?.name}</p>
+                    <p className="font-bold text-white truncate text-sm sm:text-base">{pelea.roosterB.name}</p>
+                    <p className="text-xs sm:text-sm text-gray-400 truncate">{getPartido(pelea.roosterB.partidoCuerdaId)?.name}</p>
                 </div>
             </div>
             <div className="w-full text-center text-xs text-gray-500 mt-2 font-mono">
@@ -696,7 +695,7 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
     return (
         <div className="space-y-8">
             <div className="text-center">
-                <h2 className="text-3xl font-bold text-white">Cotejador de Peleas</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">Cotejador de Peleas</h2>
             </div>
             
             <div className="flex flex-col md:flex-row justify-center gap-4">
@@ -705,7 +704,7 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
                  </button>
                   <button onClick={onShuffleFights} disabled={peleas.length === 0} className="w-full md:w-auto flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed">
                     <RepeatIcon className="w-5 h-5" />
-                    <span>Barajar Contiendas</span>
+                    <span>Barajar</span>
                  </button>
                  <button onClick={onStartTournament} disabled={peleas.length === 0} className="w-full md:w-auto flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed">
                     <PlayIcon className="w-5 h-5" />
@@ -714,8 +713,8 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
             </div>
             
             {(matchmakingNote || tournamentMetrics) && (
-                <div className="text-gray-300 bg-gray-800/50 border border-gray-700 rounded-lg p-4 max-w-2xl mx-auto">
-                    {matchmakingNote && <p className="text-center text-amber-400 text-sm mb-3">{matchmakingNote}</p>}
+                <div className="text-gray-300 bg-gray-800/50 border border-gray-700 rounded-lg p-4 max-w-2xl mx-auto text-sm">
+                    {matchmakingNote && <p className="text-center text-amber-400 mb-3">{matchmakingNote}</p>}
                     {tournamentMetrics && (
                         <div className="text-center space-y-1">
                            <p><strong>Aporte por Equipo:</strong> {tournamentMetrics.contribution} gallos</p>
@@ -735,7 +734,7 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
             <div className="space-y-8">
                 {peleas.length > 0 &&
                     <SectionCard icon={<TrophyIcon/>} title="Peleas del Torneo por Rondas">
-                        <div className="grid md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
                             {peleas.map(p => renderPelea(p))}
                         </div>
                     </SectionCard>
@@ -743,7 +742,7 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
 
                 {peleasIndividuales.length > 0 && (
                     <SectionCard icon={<RoosterIcon/>} title="Peleas Cazadas con gallos individuales">
-                        <div className="grid md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
                             {peleasIndividuales.map(p => renderPelea(p))}
                         </div>
                     </SectionCard>
@@ -840,44 +839,44 @@ const LiveFightScreen: React.FC<{ peleas: Pelea[]; partidos: PartidoCuerda[]; cu
     };
 
     const renderRoosterCard = (rooster: Gallo, side: 'A' | 'B') => (
-        <div className={`flex flex-col items-center justify-center p-8 rounded-2xl w-full ${side === 'A' ? 'bg-red-800/20' : 'bg-blue-800/20'} border ${side === 'A' ? 'border-red-700' : 'border-blue-700'}`}>
-            <h3 className="text-3xl font-extrabold text-white">{rooster.name}</h3>
-            <p className="text-lg text-gray-300">{getPartido(rooster.partidoCuerdaId)?.name}</p>
+        <div className={`flex flex-col items-center justify-center p-4 sm:p-8 rounded-2xl w-full ${side === 'A' ? 'bg-red-800/20' : 'bg-blue-800/20'} border ${side === 'A' ? 'border-red-700' : 'border-blue-700'}`}>
+            <h3 className="text-xl sm:text-3xl font-extrabold text-white text-center">{rooster.name}</h3>
+            <p className="text-base sm:text-lg text-gray-300 text-center">{getPartido(rooster.partidoCuerdaId)?.name}</p>
             <p className="font-mono mt-2 text-amber-400">{formatWeight(rooster, torneo.weightUnit)}</p>
             {currentPelea.winner === null ? (
                 <button
                     onClick={() => handleSetWinner(side)}
-                    className={`mt-6 font-bold py-3 px-8 rounded-lg transition-transform transform hover:scale-105 ${side === 'A' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}
+                    className={`mt-6 font-bold py-2 px-4 sm:py-3 sm:px-8 rounded-lg transition-transform transform hover:scale-105 ${side === 'A' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}
                 >
                     Declarar Ganador
                 </button>
-            ) : (currentPelea.winner === side && <div className="mt-6"><TrophyIcon className="w-16 h-16 text-amber-400"/></div>)}
+            ) : (currentPelea.winner === side && <div className="mt-6"><TrophyIcon className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400"/></div>)}
         </div>
     );
 
     return (
         <div className="space-y-8">
             <div className="text-center">
-                <p className="text-lg font-semibold text-amber-400">{fightSetTitle}</p>
-                <h2 className="text-4xl font-bold text-white">Pelea #{currentPelea.fightNumber} de {peleas.length}</h2>
+                <p className="text-base sm:text-lg font-semibold text-amber-400">{fightSetTitle}</p>
+                <h2 className="text-2xl sm:text-4xl font-bold text-white">Pelea #{currentPelea.fightNumber} de {peleas.length}</h2>
             </div>
 
-            <div className="relative grid md:grid-cols-2 gap-6 items-center">
+            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-center">
                 {renderRoosterCard(currentPelea.roosterA, 'A')}
                 {renderRoosterCard(currentPelea.roosterB, 'B')}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-5xl font-extrabold text-gray-900/50 -translate-y-4">VS</div>
+                    <div className="text-4xl sm:text-5xl font-extrabold text-gray-900/50 -translate-y-4">VS</div>
                 </div>
             </div>
             
-            <div className="flex flex-col items-center justify-center space-y-4 bg-gray-900/50 p-6 rounded-2xl border border-gray-700">
-                <div className="font-mono text-7xl font-bold text-white tracking-wider">{formatTime(timer)}</div>
+            <div className="flex flex-col items-center justify-center space-y-4 bg-gray-900/50 p-4 sm:p-6 rounded-2xl border border-gray-700">
+                <div className="font-mono text-5xl sm:text-7xl font-bold text-white tracking-wider">{formatTime(timer)}</div>
                 <div className="flex space-x-4">
                     <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="p-3 bg-gray-700 rounded-full hover:bg-gray-600 transition">
-                        {isTimerRunning ? <PauseIcon className="w-8 h-8"/> : <PlayIcon className="w-8 h-8"/>}
+                        {isTimerRunning ? <PauseIcon className="w-6 h-6 sm:w-8 sm:h-8"/> : <PlayIcon className="w-6 h-6 sm:w-8 sm:h-8"/>}
                     </button>
                     <button onClick={() => { setTimer(torneo.fightDuration * 60); setIsTimerRunning(false); }} className="p-3 bg-gray-700 rounded-full hover:bg-gray-600 transition">
-                       <RepeatIcon className="w-8 h-8"/>
+                       <RepeatIcon className="w-6 h-6 sm:w-8 sm:h-8"/>
                     </button>
                 </div>
                  {currentPelea.winner === null ? (
@@ -892,7 +891,7 @@ const LiveFightScreen: React.FC<{ peleas: Pelea[]; partidos: PartidoCuerda[]; cu
                     Anterior
                 </button>
                 <button onClick={onFinishTournament} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-6 rounded-lg transition">
-                    Finalizar y Ver Resultados
+                    Finalizar
                 </button>
                 <button onClick={() => setCurrentFightIndex(currentFightIndex + 1)} disabled={currentFightIndex >= peleas.length - 1} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
                     Siguiente
@@ -952,7 +951,7 @@ const ResultsScreen: React.FC<{ peleas: Pelea[]; peleasIndividuales: Pelea[]; pa
         <tr key={pelea.id} className="border-b border-gray-700 hover:bg-gray-800/50">
             <td className="px-4 py-3 text-center">{pelea.fightNumber}</td>
             <td className={`px-4 py-3 text-right ${pelea.winner === 'A' ? 'font-bold text-white' : ''}`}>
-                {pelea.roosterA.name} <span className="text-gray-400 text-xs">({getPartidoName(pelea.roosterA.partidoCuerdaId)})</span>
+                {pelea.roosterA.name} <span className="text-gray-400 text-xs hidden sm:inline">({getPartidoName(pelea.roosterA.partidoCuerdaId)})</span>
             </td>
             <td className="px-2 py-3 text-center">
                <span className={`px-2 py-1 text-xs font-bold rounded-full ${
@@ -961,20 +960,20 @@ const ResultsScreen: React.FC<{ peleas: Pelea[]; peleasIndividuales: Pelea[]; pa
                     pelea.winner === 'DRAW' ? 'bg-amber-500 text-black' : 
                     'bg-gray-600 text-gray-300'
                 }`}>
-                    {pelea.winner === 'A' ? 'GANA A' : pelea.winner === 'B' ? 'GANA B' : pelea.winner === 'DRAW' ? 'EMPATE' : 'PENDIENTE'}
+                    {pelea.winner === 'A' ? 'GANA A' : pelea.winner === 'B' ? 'GANA B' : pelea.winner === 'DRAW' ? 'EMPATE' : 'N/A'}
                 </span>
             </td>
             <td className={`px-4 py-3 text-left ${pelea.winner === 'B' ? 'font-bold text-white' : ''}`}>
-               <span className="text-gray-400 text-xs">({getPartidoName(pelea.roosterB.partidoCuerdaId)})</span> {pelea.roosterB.name}
+               <span className="text-gray-400 text-xs hidden sm:inline">({getPartidoName(pelea.roosterB.partidoCuerdaId)})</span> {pelea.roosterB.name}
             </td>
             <td className="px-4 py-3 text-center font-mono">{formatDuration(pelea.duration)}</td>
         </tr>
     );
 
     return (
-        <div className="space-y-12">
+        <div className="space-y-8">
             <div className="text-center">
-                <h2 className="text-3xl font-bold text-white">Resultados del Torneo</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">Resultados del Torneo</h2>
                 <p className="text-gray-400 mt-2">{torneo.name}</p>
             </div>
 
@@ -984,23 +983,23 @@ const ResultsScreen: React.FC<{ peleas: Pelea[]; peleasIndividuales: Pelea[]; pa
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-700/50 text-xs text-amber-400 uppercase tracking-wider">
                                 <tr>
-                                    <th scope="col" className="px-6 py-3 rounded-l-lg">Pos.</th>
-                                    <th scope="col" className="px-6 py-3">Equipo</th>
-                                    <th scope="col" className="px-6 py-3 text-center">Puntos</th>
-                                    <th scope="col" className="px-6 py-3 text-center">Victorias</th>
-                                    <th scope="col" className="px-6 py-3 text-center">Empates</th>
-                                    <th scope="col" className="px-6 py-3 text-center rounded-r-lg">Derrotas</th>
+                                    <th scope="col" className="px-2 sm:px-6 py-3 rounded-l-lg">Pos.</th>
+                                    <th scope="col" className="px-2 sm:px-6 py-3">Equipo</th>
+                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center">Pts</th>
+                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center">V</th>
+                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center">E</th>
+                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center rounded-r-lg">D</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {stats.map((stat, index) => (
                                     <tr key={stat.partidoCuerdaId} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                        <td className="px-6 py-4 font-bold text-lg text-white text-center">{index + 1}</td>
-                                        <td className="px-6 py-4 font-medium text-white">{stat.partidoCuerdaName}</td>
-                                        <td className="px-6 py-4 text-center text-lg font-bold text-amber-400">{stat.points}</td>
-                                        <td className="px-6 py-4 text-center text-green-400">{stat.wins}</td>
-                                        <td className="px-6 py-4 text-center text-gray-400">{stat.draws}</td>
-                                        <td className="px-6 py-4 text-center text-red-500">{stat.losses}</td>
+                                        <td className="px-2 sm:px-6 py-4 font-bold text-lg text-white text-center">{index + 1}</td>
+                                        <td className="px-2 sm:px-6 py-4 font-medium text-white">{stat.partidoCuerdaName}</td>
+                                        <td className="px-2 sm:px-6 py-4 text-center text-lg font-bold text-amber-400">{stat.points}</td>
+                                        <td className="px-2 sm:px-6 py-4 text-center text-green-400">{stat.wins}</td>
+                                        <td className="px-2 sm:px-6 py-4 text-center text-gray-400">{stat.draws}</td>
+                                        <td className="px-2 sm:px-6 py-4 text-center text-red-500">{stat.losses}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -1049,7 +1048,7 @@ const ResultsScreen: React.FC<{ peleas: Pelea[]; peleasIndividuales: Pelea[]; pa
                     {hasUnfoughtIndividualFights && (
                          <button onClick={onStartIndividualFights} className="mt-4 w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all">
                             <PlayIcon className="w-6 h-6" />
-                            <span>Luchar Peleas Individuales</span>
+                            <span>Luchar Individuales</span>
                         </button>
                     )}
                  </SectionCard>
@@ -1068,52 +1067,18 @@ const AuthContainer: React.FC<{ title: string, children: React.ReactNode}> = ({ 
     <div className="flex items-center justify-center min-h-screen p-4">
         <div className="w-full max-w-md">
             <div className="text-center mb-8">
-                 <TrophyIcon className="w-16 h-16 text-amber-400 mx-auto" />
-                 <h1 className="text-4xl font-bold text-white tracking-wider mt-2">Cotejador de Gallos</h1>
+                 <TrophyIcon className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400 mx-auto" />
+                 <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-wider mt-2">Cotejador de Gallos</h1>
                  <p className="text-gray-400">{title}</p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl p-8 space-y-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6">
                 {children}
             </div>
         </div>
     </div>
 )
 
-const RegisterScreen: React.FC<{ 
-    onRegister: (name: string, phone: string, email: string, pass: string) => void; 
-    onBackToLogin: () => void;
-}> = ({onRegister, onBackToLogin}) => {
-    const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onRegister(name, phone, email, password);
-    }
-    
-    return(
-        <AuthContainer title="Crear una Cuenta Nueva">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <InputField label="Nombre Completo" id="reg-name" type="text" value={name} onChange={e => setName(e.target.value)} required />
-                <InputField label="Teléfono" id="reg-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} required />
-                <InputField label="Correo Electrónico" id="reg-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                <InputField label="Contraseña" id="reg-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                 <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-4 rounded-lg transition-colors text-lg">
-                    Registrarme
-                </button>
-            </form>
-            <div className="text-center pt-2">
-                <button onClick={onBackToLogin} className="text-sm text-amber-400 hover:underline">
-                    ¿Ya tienes una cuenta? Inicia sesión
-                </button>
-            </div>
-        </AuthContainer>
-    )
-}
-
-const LoginScreen: React.FC<{ onLogin: (email: string, pass: string) => void; onGoToRegister: () => void; }> = ({onLogin, onGoToRegister}) => {
+const LoginScreen: React.FC<{ onLogin: (email: string, pass: string) => void; }> = ({onLogin}) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
@@ -1131,15 +1096,14 @@ const LoginScreen: React.FC<{ onLogin: (email: string, pass: string) => void; on
                     Entrar
                 </button>
             </form>
-            <div className="text-center text-sm text-gray-400 font-semibold pt-2 space-x-2">
+            <div className="text-center text-sm text-gray-400 pt-2">
                  <span>Solo para miembros.</span>
-                 <button onClick={onGoToRegister} className="font-bold text-amber-400 hover:underline">Regístrate</button>
             </div>
         </AuthContainer>
     )
 }
 
-const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser: (userId: string) => void, onGoToApp: () => void, onAddUser: (user: Omit<User, 'id'>, pass: string) => void; showNotification: (message: string, type: Notification['type']) => void; onLoadDemoData: () => void; }> = ({ users, currentUser, onDeleteUser, onGoToApp, onAddUser, showNotification, onLoadDemoData }) => {
+const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser: (userId: string) => void, onGoToApp: () => void, onAddUser: (user: Omit<User, 'id'>, pass: string) => void; }> = ({ users, currentUser, onDeleteUser, onGoToApp, onAddUser }) => {
     const [isUserModalOpen, setUserModalOpen] = useState(false);
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
@@ -1155,10 +1119,18 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
         setName(''); setPhone(''); setEmail(''); setPassword(''); setRole('user');
     }
 
+    const getRoleClass = (role: User['role']) => {
+        switch(role) {
+            case 'admin': return 'bg-amber-500 text-black';
+            case 'demo': return 'bg-blue-500 text-white';
+            default: return 'bg-gray-600';
+        }
+    }
+
     return (
         <div className="space-y-8">
             <div className="text-center">
-                <h2 className="text-3xl font-bold text-white">Panel de Administración</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">Panel de Administración</h2>
                 <p className="text-gray-400 mt-2">Gestiona los usuarios y datos del sistema.</p>
             </div>
 
@@ -1166,13 +1138,11 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                 <button onClick={onGoToApp} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
                     Ir al Cotejador
                 </button>
-                <button onClick={onLoadDemoData} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
-                    Cargar Datos de Demostración
-                </button>
             </div>
 
             <SectionCard icon={<UsersIcon />} title="Usuarios Registrados" buttonText="Añadir Usuario" onButtonClick={() => setUserModalOpen(true)}>
-                <div className="overflow-x-auto">
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-700/50 text-xs text-amber-400 uppercase">
                             <tr>
@@ -1187,7 +1157,7 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                                 <tr key={user.id} className="border-b border-gray-700">
                                     <td className="px-4 py-3 font-medium text-white">{user.name}</td>
                                     <td className="px-4 py-3">{user.email}</td>
-                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-amber-500 text-black' : user.role === 'demo' ? 'bg-blue-500 text-white' : 'bg-gray-600'}`}>{user.role}</span></td>
+                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${getRoleClass(user.role)}`}>{user.role}</span></td>
                                     <td className="px-4 py-3 text-center">
                                         {user.id !== currentUser.id && (
                                             <button onClick={() => onDeleteUser(user.id)} className="text-red-500 hover:text-red-400 p-1">
@@ -1199,6 +1169,27 @@ const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser:
                             ))}
                         </tbody>
                     </table>
+                </div>
+                {/* Mobile Cards */}
+                <div className="block md:hidden space-y-3">
+                    {users.map(user => (
+                        <div key={user.id} className="bg-gray-700/50 p-4 rounded-lg">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="font-bold text-white">{user.name}</p>
+                                    <p className="text-sm text-gray-400">{user.email}</p>
+                                </div>
+                                {user.id !== currentUser.id && (
+                                    <button onClick={() => onDeleteUser(user.id)} className="text-red-500 hover:text-red-400 p-1 flex-shrink-0">
+                                        <TrashIcon className="w-5 h-5"/>
+                                    </button>
+                                )}
+                            </div>
+                            <div className="mt-2">
+                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${getRoleClass(user.role)}`}>{user.role}</span>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </SectionCard>
 
@@ -1294,7 +1285,7 @@ const App: React.FC = () => {
                     const adminUser = userCredential.user;
     
                     const adminData: Omit<User, 'id'> = {
-                        name: "Carlos",
+                        name: "carlos",
                         phone: "3197633335",
                         email: adminEmail,
                         role: 'admin',
@@ -1321,8 +1312,14 @@ const App: React.FC = () => {
                 const userDocSnap = await getDoc(userDocRef);
 
                 if (userDocSnap.exists()) {
-                    const userData = { id: user.uid, ...userDocSnap.data() } as User;
-                    setCurrentUser(userData);
+                     const userData = userDocSnap.data();
+                    setCurrentUser({ 
+                        id: user.uid,
+                        name: userData.name,
+                        phone: userData.phone,
+                        email: userData.email,
+                        role: userData.role
+                    });
                     changeScreen(userData.role === 'admin' ? Screen.ADMIN_DASHBOARD : Screen.SETUP);
                 } else {
                     console.error("User profile not found in Firestore.");
@@ -1395,41 +1392,20 @@ const App: React.FC = () => {
 
     // --- AUTH HANDLERS ---
     const handleLogin = async (email: string, pass: string) => {
+        if (!email || !pass) {
+            showNotification("Por favor, introduce tu correo y contraseña.", 'error');
+            return;
+        }
         try {
             await signInWithEmailAndPassword(auth, email, pass);
-            // onAuthStateChanged will handle the rest
+            showNotification('Iniciando sesión...', 'success');
         } catch (error: any) {
-            showNotification("Email o contraseña incorrectos.", 'error');
-            console.error(error);
-        }
-    };
-
-    const handleRegister = async (name: string, phone: string, email: string, pass: string) => {
-        try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-            const newUser = userCredential.user;
-    
-            const userData: Omit<User, 'id'> = {
-                name,
-                phone,
-                email,
-                role: 'user' // New users are always 'user' role
-            };
-    
-            await setDoc(doc(db, "users", newUser.uid), userData);
-            // onAuthStateChanged will handle the login and screen change automatically.
-            showNotification("¡Registro exitoso! Ahora estás conectado.", "success");
-    
-        } catch (error: any) {
-            if (error.code === 'auth/email-already-in-use') {
-                showNotification('El correo electrónico ya está en uso.', 'error');
-            } else if (error.code === 'auth/weak-password') {
-                showNotification('La contraseña debe tener al menos 6 caracteres.', 'error');
+            console.error("Error en el inicio de sesión:", error.code);
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                showNotification('El correo o la contraseña son incorrectos.', 'error');
+            } else {
+                showNotification('Ocurrió un error inesperado al iniciar sesión.', 'error');
             }
-            else {
-                showNotification('Error al registrarse.', 'error');
-            }
-            console.error("Error registering user:", error);
         }
     };
 
@@ -1449,10 +1425,7 @@ const App: React.FC = () => {
             const newFirebaseUser = userCredential.user;
             
             // Now save the user profile in Firestore using the main app's db instance
-            await setDoc(doc(db, "users", newFirebaseUser.uid), {
-                ...newUser,
-                id: newFirebaseUser.uid
-            });
+            await setDoc(doc(db, "users", newFirebaseUser.uid), newUser);
             
             showNotification('Usuario añadido con éxito.', 'success');
         } catch (error: any) {
@@ -1550,32 +1523,6 @@ const App: React.FC = () => {
         if(gallo) {
             await deleteDoc(doc(db, "gallos", galloId));
             showNotification(`Gallo '${gallo.name}' eliminado.`, 'success');
-        }
-    };
-
-    const handleLoadDemoData = async () => {
-        if (!currentUser) return;
-
-        const batch = writeBatch(db);
-
-        // Add demo partidos
-        INITIAL_PARTIDOS_CUERDAS.forEach(partido => {
-            const docRef = doc(collection(db, "partidos"));
-            batch.set(docRef, { ...partido, id: docRef.id, userId: currentUser.id });
-        });
-
-        // Add demo gallos
-        INITIAL_GALLOS.forEach(gallo => {
-            const docRef = doc(collection(db, "gallos"));
-            batch.set(docRef, { ...gallo, id: docRef.id, userId: currentUser.id });
-        });
-
-        try {
-            await batch.commit();
-            showNotification("Datos de demostración cargados exitosamente.", "success");
-        } catch (error) {
-            showNotification("Error al cargar los datos de demostración.", "error");
-            console.error("Error loading demo data:", error);
         }
     };
 
@@ -1718,7 +1665,7 @@ const App: React.FC = () => {
     const renderMainApp = () => {
         switch (currentScreen) {
             case Screen.ADMIN_DASHBOARD:
-                return <AdminDashboard users={users} currentUser={currentUser!} onDeleteUser={handleAdminDeleteUser} onGoToApp={() => changeScreen(Screen.SETUP)} onAddUser={handleAdminAddUser} showNotification={showNotification} onLoadDemoData={handleLoadDemoData} />;
+                return <AdminDashboard users={users} currentUser={currentUser!} onDeleteUser={handleAdminDeleteUser} onGoToApp={() => changeScreen(Screen.SETUP)} onAddUser={handleAdminAddUser} />;
             case Screen.SETUP:
                 return <SetupScreen 
                     partidosCuerdas={partidosCuerdas} 
@@ -1760,12 +1707,10 @@ const App: React.FC = () => {
     const renderAuthScreens = () => {
          switch (currentScreen) {
             case Screen.LOGIN:
-                return <LoginScreen onLogin={handleLogin} onGoToRegister={() => changeScreen(Screen.REGISTER)} />;
-            case Screen.REGISTER:
-                return <RegisterScreen onRegister={handleRegister} onBackToLogin={() => changeScreen(Screen.LOGIN)} />;
+                return <LoginScreen onLogin={handleLogin} />;
             default:
                 // If somehow on a non-auth screen while logged out, force login
-                return <LoginScreen onLogin={handleLogin} onGoToRegister={() => changeScreen(Screen.REGISTER)} />;
+                return <LoginScreen onLogin={handleLogin} />;
         }
     }
 
