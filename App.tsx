@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
@@ -102,8 +103,9 @@ const findPerfectMatching = (
             const weightA = convertToGrams(roosterToPair.weight, roosterToPair.weightUnit);
             const weightB = convertToGrams(partner.weight, partner.weightUnit);
             const weightDiff = Math.abs(weightA - weightB);
+            const ageDiff = Math.abs((roosterToPair.ageMonths || 1) - (partner.ageMonths || 1));
 
-            if (weightDiff <= torneo.weightTolerance) {
+            if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0)) {
                 potentialPartners.push({ partner, weightDiff });
             }
         });
@@ -173,8 +175,9 @@ const findMaximumPairsGreedy = (
             const weightA = convertToGrams(roosterA.weight, roosterA.weightUnit);
             const weightB = convertToGrams(roosterB.weight, roosterB.weightUnit);
             const weightDiff = Math.abs(weightA - weightB);
+            const ageDiff = Math.abs((roosterA.ageMonths || 1) - (roosterB.ageMonths || 1));
 
-            if (weightDiff <= torneo.weightTolerance && weightDiff < smallestWeightDiff) {
+            if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0) && weightDiff < smallestWeightDiff) {
                 smallestWeightDiff = weightDiff;
                 bestPartner = roosterB;
             }
@@ -428,6 +431,7 @@ const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (
     const [name, setName] = useState('');
     const [partidoCuerdaId, setPartidoCuerdaId] = useState('');
     const [weight, setWeight] = useState(0);
+    const [ageMonths, setAgeMonths] = useState(1);
     const [characteristics, setCharacteristics] = useState('');
 
     useEffect(() => {
@@ -436,6 +440,7 @@ const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (
             setName(gallo?.name || '');
             setPartidoCuerdaId(gallo?.partidoCuerdaId || partidos[0]?.id || '');
             setWeight(gallo?.weight || 0);
+            setAgeMonths(gallo?.ageMonths || 1);
             setCharacteristics(gallo?.characteristics || '');
         }
     }, [isOpen, gallo, partidos]);
@@ -446,7 +451,7 @@ const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (
             showNotification("Por favor, seleccione un partido.", 'error');
             return;
         }
-        onSave({ ringId, name, partidoCuerdaId, weight, weightUnit: globalWeightUnit, characteristics });
+        onSave({ ringId, name, partidoCuerdaId, weight, weightUnit: globalWeightUnit, ageMonths, characteristics });
     };
 
     return (
@@ -463,14 +468,9 @@ const GalloFormModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (
                         {partidos.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                     <InputField type="number" label="Peso" value={weight} onChange={e => setWeight(Number(e.target.value))} required />
-                     <div>
-                         <label className="block text-sm font-medium text-gray-400 mb-1">Unidad</label>
-                         <select value={globalWeightUnit} disabled className="w-full bg-gray-600 border border-gray-500 text-white rounded-lg px-3 py-2 outline-none transition opacity-70">
-                            <option value={globalWeightUnit}>{globalWeightUnit.charAt(0).toUpperCase() + globalWeightUnit.slice(1)}</option>
-                         </select>
-                     </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     <InputField type="number" label={`Peso (${getWeightUnitAbbr(globalWeightUnit)})`} value={weight} onChange={e => setWeight(Number(e.target.value))} required step="any" />
+                     <InputField type="number" label="Meses" value={ageMonths} onChange={e => setAgeMonths(Number(e.target.value))} required min="1" />
                 </div>
                 <div>
                     <label htmlFor="characteristics" className="block text-sm font-medium text-gray-400 mb-1">Características</label>
@@ -549,8 +549,10 @@ const SetupScreen: React.FC<{
                                     {Object.values(PesoUnit).map(u => <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>)}
                                  </select>
                              </div>
-                            <InputField type="number" label="Tolerancia (g)" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
+                             <InputField type="number" label="Tolerancia" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
                         </div>
+                        <InputField type="number" label="Tolerancia de Meses" value={torneo.ageToleranceMonths ?? ''} onChange={(e) => onUpdateTorneo({...torneo, ageToleranceMonths: Number(e.target.value)})} />
+                        
                         <div className="border-t border-gray-700 my-4"></div>
                         <div className="flex items-center justify-between">
                             <label htmlFor="rondas-toggle" className="text-white font-medium text-sm sm:text-base">Cotejo por aporte de equipo</label>
@@ -584,6 +586,7 @@ const SetupScreen: React.FC<{
                                                 <p className="font-semibold text-white text-sm sm:text-base">{g.name} <span className="text-xs text-gray-400 font-normal">({g.ringId})</span></p>
                                             </div>
                                             <div className="flex items-center space-x-1 sm:space-x-2">
+                                                {g.ageMonths > 0 && <span className="font-mono text-xs sm:text-sm bg-gray-600/80 px-2 py-1 rounded text-white">{g.ageMonths}m</span>}
                                                 <span className="font-mono text-xs sm:text-sm bg-gray-800 px-2 py-1 rounded">{formatWeight(g, torneo.weightUnit)}</span>
                                                 <button onClick={() => { setCurrentGallo(g); setGalloModalOpen(true); }} className="text-gray-400 hover:text-amber-400 transition-colors p-1">
                                                     <PencilIcon className="w-4 h-4 sm:w-5 sm:h-5"/>
@@ -686,8 +689,10 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
                     <p className="text-xs sm:text-sm text-gray-400 truncate">{getPartido(pelea.roosterB.partidoCuerdaId)?.name}</p>
                 </div>
             </div>
-            <div className="w-full text-center text-xs text-gray-500 mt-2 font-mono">
-                {formatWeight(pelea.roosterA, torneo.weightUnit)} vs {formatWeight(pelea.roosterB, torneo.weightUnit)}
+            <div className="w-full text-center text-xs text-gray-500 mt-2 font-mono space-x-2">
+                <span>{pelea.roosterA.ageMonths}m vs {pelea.roosterB.ageMonths}m</span>
+                <span className="text-gray-600">|</span>
+                <span>{formatWeight(pelea.roosterA, torneo.weightUnit)} vs {formatWeight(pelea.roosterB, torneo.weightUnit)}</span>
             </div>
         </div>
     );
@@ -757,7 +762,10 @@ const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuer
                                         <p className="font-semibold text-white">{g.name}</p>
                                         <p className="text-xs text-gray-400">{partidosCuerdas.find(p => p.id === g.partidoCuerdaId)?.name}</p>
                                     </div>
-                                    <span className="font-mono text-sm">{formatWeight(g, torneo.weightUnit)}</span>
+                                    <div className="font-mono text-sm space-x-2">
+                                       {g.ageMonths > 0 && <span className="text-white">{g.ageMonths}m</span>}
+                                       <span className="text-gray-400">{formatWeight(g, torneo.weightUnit)}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -842,7 +850,11 @@ const LiveFightScreen: React.FC<{ peleas: Pelea[]; partidos: PartidoCuerda[]; cu
         <div className={`flex flex-col items-center justify-center p-4 sm:p-8 rounded-2xl w-full ${side === 'A' ? 'bg-red-800/20' : 'bg-blue-800/20'} border ${side === 'A' ? 'border-red-700' : 'border-blue-700'}`}>
             <h3 className="text-xl sm:text-3xl font-extrabold text-white text-center">{rooster.name}</h3>
             <p className="text-base sm:text-lg text-gray-300 text-center">{getPartido(rooster.partidoCuerdaId)?.name}</p>
-            <p className="font-mono mt-2 text-amber-400">{formatWeight(rooster, torneo.weightUnit)}</p>
+            <div className="font-mono mt-2 text-amber-400 space-x-2">
+                <span>{rooster.ageMonths}m</span>
+                <span className="text-gray-500">|</span>
+                <span>{formatWeight(rooster, torneo.weightUnit)}</span>
+            </div>
             {currentPelea.winner === null ? (
                 <button
                     onClick={() => handleSetWinner(side)}
@@ -1221,6 +1233,7 @@ const DEFAULT_TORNEO: Torneo = {
     name: 'Torneo Anual de la Candelaria',
     date: new Date().toISOString().split('T')[0],
     weightTolerance: 60,
+    ageToleranceMonths: 2,
     fightDuration: 10,
     weightUnit: PesoUnit.GRAMS,
     rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
@@ -1345,7 +1358,9 @@ const App: React.FC = () => {
         const torneoDocRef = doc(db, "torneos", currentUser.id);
         const unsubTorneo = onSnapshot(torneoDocRef, (docSnap) => {
             if (docSnap.exists()) {
-                setTorneo(docSnap.data() as Torneo);
+                const dataFromDb = docSnap.data();
+                // Merge with defaults to ensure new fields (like ageToleranceMonths) are present for older DB entries
+                setTorneo({ ...DEFAULT_TORNEO, ...dataFromDb });
             } else {
                 // If no tournament settings exist for user, create with default
                 setDoc(torneoDocRef, { ...DEFAULT_TORNEO, userId: currentUser.id });
@@ -1362,7 +1377,15 @@ const App: React.FC = () => {
         // Subscribe to Gallos
         const gallosQuery = query(collection(db, "gallos"), where("userId", "==", currentUser.id));
         const unsubGallos = onSnapshot(gallosQuery, (snapshot) => {
-            const gallosData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Gallo[];
+            const gallosData = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Ensure ageMonths has a default value for old rooster entries in DB
+                    ageMonths: data.ageMonths || 1,
+                } as Gallo;
+            });
             setGallos(gallosData);
         });
 
