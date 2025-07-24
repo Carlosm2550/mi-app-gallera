@@ -1280,17 +1280,20 @@ const App: React.FC = () => {
         setNotifications(prev => prev.filter(n => n.id !== id));
     };
 
-    const populateDemoDataForUser = async (userId: string) => {
+    const populateInitialDataForUser = async (userId: string, newUser: Omit<User, 'id'>) => {
         const batch = writeBatch(db);
         const partidosRef = collection(db, "partidos");
         const gallosRef = collection(db, "gallos");
+
+        const ownerName = newUser.role === 'demo' ? 'Demo' : newUser.name;
+        const ringPrefix = newUser.role === 'demo' ? 'D' : 'U';
 
         for (const data of DEMO_GALLERAS) {
             const newPartidoRef = doc(partidosRef);
             
             const partidoData: Omit<PartidoCuerda, 'id'> = {
                 name: data.partidoName,
-                owner: "Demo",
+                owner: ownerName,
                 userId: userId,
             };
             batch.set(newPartidoRef, partidoData);
@@ -1298,7 +1301,7 @@ const App: React.FC = () => {
             for (const gallo of data.gallos) {
                 const newGalloRef = doc(gallosRef);
                 const galloData: Omit<Gallo, 'id'> = {
-                    ringId: `D-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+                    ringId: `${ringPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
                     name: gallo.name,
                     partidoCuerdaId: newPartidoRef.id,
                     weight: gallo.weight,
@@ -1313,11 +1316,11 @@ const App: React.FC = () => {
 
         try {
             await batch.commit();
-            console.log(`Demo data populated successfully for user ${userId}`);
-            showNotification('Datos de demostración creados con éxito.', 'success');
+            console.log(`Initial data populated successfully for user ${userId}`);
+            showNotification('Datos de ejemplo creados con éxito.', 'success');
         } catch (error) {
-            console.error("Error populating demo data:", error);
-            showNotification('Error al crear los datos de demostración.', 'error');
+            console.error("Error populating initial data:", error);
+            showNotification('Error al crear los datos de ejemplo.', 'error');
         }
     };
 
@@ -1494,8 +1497,8 @@ const App: React.FC = () => {
             // Now save the user profile in Firestore using the main app's db instance
             await setDoc(doc(db, "users", newFirebaseUser.uid), newUser);
             
-            if (newUser.role === 'demo') {
-                await populateDemoDataForUser(newFirebaseUser.uid);
+            if (newUser.role === 'demo' || newUser.role === 'user') {
+                await populateInitialDataForUser(newFirebaseUser.uid, newUser);
             }
 
             showNotification('Usuario añadido con éxito.', 'success');
