@@ -1497,7 +1497,7 @@ const App: React.FC = () => {
             // Now save the user profile in Firestore using the main app's db instance
             await setDoc(doc(db, "users", newFirebaseUser.uid), newUser);
             
-            if (newUser.role === 'demo' || newUser.role === 'user') {
+            if (newUser.role === 'demo' || newUser.role === 'user' || newUser.role === 'admin') {
                 await populateInitialDataForUser(newFirebaseUser.uid, newUser);
             }
 
