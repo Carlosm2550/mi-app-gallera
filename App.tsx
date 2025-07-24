@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
@@ -28,6 +29,7 @@ import {
     updateDoc
 } from "firebase/firestore";
 import { initializeApp } from 'firebase/app';
+import { DEMO_GALLERAS } from './constants';
 
 
 // --- UTILITY FUNCTIONS ---
@@ -1278,6 +1280,48 @@ const App: React.FC = () => {
         setNotifications(prev => prev.filter(n => n.id !== id));
     };
 
+    const populateDemoDataForUser = async (userId: string) => {
+        const batch = writeBatch(db);
+        const partidosRef = collection(db, "partidos");
+        const gallosRef = collection(db, "gallos");
+
+        for (const data of DEMO_GALLERAS) {
+            const newPartidoRef = doc(partidosRef);
+            
+            const partidoData: Omit<PartidoCuerda, 'id'> = {
+                name: data.partidoName,
+                owner: "Demo",
+                userId: userId,
+            };
+            batch.set(newPartidoRef, partidoData);
+
+            for (const gallo of data.gallos) {
+                const newGalloRef = doc(gallosRef);
+                const galloData: Omit<Gallo, 'id'> = {
+                    ringId: `D-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+                    name: gallo.name,
+                    partidoCuerdaId: newPartidoRef.id,
+                    weight: gallo.weight,
+                    weightUnit: PesoUnit.GRAMS,
+                    ageMonths: gallo.ageMonths,
+                    characteristics: "",
+                    userId: userId,
+                };
+                batch.set(newGalloRef, galloData);
+            }
+        }
+
+        try {
+            await batch.commit();
+            console.log(`Demo data populated successfully for user ${userId}`);
+            showNotification('Datos de demostración creados con éxito.', 'success');
+        } catch (error) {
+            console.error("Error populating demo data:", error);
+            showNotification('Error al crear los datos de demostración.', 'error');
+        }
+    };
+
+
     // --- FIREBASE EFFECTS ---
     useEffect(() => {
         const setupAdmin = async () => {
@@ -1450,6 +1494,10 @@ const App: React.FC = () => {
             // Now save the user profile in Firestore using the main app's db instance
             await setDoc(doc(db, "users", newFirebaseUser.uid), newUser);
             
+            if (newUser.role === 'demo') {
+                await populateDemoDataForUser(newFirebaseUser.uid);
+            }
+
             showNotification('Usuario añadido con éxito.', 'success');
         } catch (error: any) {
              if (error.code === 'auth/email-already-in-use') {
