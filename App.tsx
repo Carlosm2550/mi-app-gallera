@@ -617,9 +617,8 @@ const MatchmakingScreen: React.FC<{
     partidosCuerdas: PartidoCuerda[];
     onStartTournament: () => void;
     onBack: () => void;
-    onGenerateIndividualFights: () => void;
-}> = ({ results, torneo, partidosCuerdas, onStartTournament, onBack, onGenerateIndividualFights }) => {
-    
+}> = ({ results, torneo, partidosCuerdas, onStartTournament, onBack }) => {
+  
     const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
 
     const renderPelea = (pelea: Pelea, index: number) => (
@@ -1520,15 +1519,15 @@ const App: React.FC = () => {
     switch(currentScreen) {
       case Screen.MATCHMAKING:
         return matchmakingResults ? <MatchmakingScreen 
-                    results={matchmakingResults}
-                    torneo={torneo}
-                    partidosCuerdas={partidosCuerdas}
-                    onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
-                    onBack={() => {
-                      setMatchmakingResults(null);
-                      setCurrentScreen(Screen.SETUP);
-                    }}
-                    onGenerateIndividualFights={handleGenerateIndividualFights}
+    results={matchmakingResults}
+    torneo={torneo}
+    partidosCuerdas={partidosCuerdas}
+    onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
+    onBack={() => {
+      setMatchmakingResults(null);
+      setCurrentScreen(Screen.SETUP);
+    }}
+/>
                /> : null;
       case Screen.LIVE_FIGHT: {
         const allFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
