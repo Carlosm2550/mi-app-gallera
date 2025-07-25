@@ -7,7 +7,7 @@ import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
 import { auth, db, firebaseConfig } from './firebase';
-import * as firebaseApp from 'firebase/app';
+import { initializeApp } from 'firebase/app';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -893,6 +893,46 @@ const ResultsScreen: React.FC<{
 
     }, [peleas, partidosCuerdas, torneo]);
 
+    const individualStats = useMemo(() => {
+        const statsMap: { [key: string]: { gallo: Gallo; wins: number; draws: number; losses: number; } } = {};
+
+        const individualFights = peleas.filter(p => !p.isRoundFight);
+
+        individualFights.forEach(pelea => {
+            if (!pelea.winner) return;
+
+            const roosters = [pelea.roosterA, pelea.roosterB];
+            roosters.forEach(gallo => {
+                if (!statsMap[gallo.id]) {
+                    statsMap[gallo.id] = {
+                        gallo,
+                        wins: 0,
+                        draws: 0,
+                        losses: 0,
+                    };
+                }
+            });
+
+            const statsA = statsMap[pelea.roosterA.id];
+            const statsB = statsMap[pelea.roosterB.id];
+
+            if (pelea.winner === 'A') {
+                statsA.wins++;
+                statsB.losses++;
+            } else if (pelea.winner === 'B') {
+                statsB.wins++;
+                statsA.losses++;
+            } else if (pelea.winner === 'DRAW') {
+                statsA.draws++;
+                statsB.draws++;
+            }
+        });
+        
+        return Object.values(statsMap).sort((a, b) => b.wins - a.wins || a.losses - b.losses);
+
+    }, [peleas, partidosCuerdas]);
+
+
     return (
         <div className="space-y-8">
             <div className="text-center">
@@ -916,7 +956,7 @@ const ResultsScreen: React.FC<{
                                 </tr>
                             </thead>
                             <tbody>
-                               {stats.map((stat, index) => (
+                               {stats.filter(s => s.wins > 0 || s.draws > 0 || s.losses > 0).map((stat, index) => (
                                    <tr key={stat.partidoCuerdaId} className="border-b border-gray-700 hover:bg-gray-700/30">
                                        <td className="px-4 py-3 font-bold">{index + 1}</td>
                                        <td className="px-4 py-3 font-semibold text-white">{stat.partidoCuerdaName}</td>
@@ -924,6 +964,38 @@ const ResultsScreen: React.FC<{
                                        <td className="px-4 py-3 text-center text-yellow-400">{stat.draws}</td>
                                        <td className="px-4 py-3 text-center text-red-400">{stat.losses}</td>
                                        <td className="px-4 py-3 text-center font-bold text-white">{stat.points}</td>
+                                   </tr>
+                               ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {individualStats.length > 0 && (
+                 <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 sm:p-6">
+                    <h3 className="text-xl font-bold text-amber-400 mb-4">Tabla de Posiciones Individuales</h3>
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left text-gray-300">
+                            <thead className="text-xs text-amber-400 uppercase bg-gray-700/50">
+                                <tr>
+                                    <th scope="col" className="px-4 py-3">Pos</th>
+                                    <th scope="col" className="px-4 py-3">Gallo</th>
+                                    <th scope="col" className="px-4 py-3">Equipo</th>
+                                    <th scope="col" className="px-4 py-3 text-center">G</th>
+                                    <th scope="col" className="px-4 py-3 text-center">E</th>
+                                    <th scope="col" className="px-4 py-3 text-center">P</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                               {individualStats.map((stat, index) => (
+                                   <tr key={stat.gallo.id} className="border-b border-gray-700 hover:bg-gray-700/30">
+                                       <td className="px-4 py-3 font-bold">{index + 1}</td>
+                                       <td className="px-4 py-3 font-semibold text-white">{stat.gallo.name}</td>
+                                       <td className="px-4 py-3">{getPartidoName(stat.gallo.partidoCuerdaId)}</td>
+                                       <td className="px-4 py-3 text-center text-green-400">{stat.wins}</td>
+                                       <td className="px-4 py-3 text-center text-yellow-400">{stat.draws}</td>
+                                       <td className="px-4 py-3 text-center text-red-400">{stat.losses}</td>
                                    </tr>
                                ))}
                             </tbody>
@@ -1286,7 +1358,7 @@ const App: React.FC = () => {
 
   const handleAdminAddUser = async (name: string, phone: string, email: string, pass: string, role: 'user' | 'demo') => {
     // This function needs a temporary Firebase app instance to not conflict with current user session.
-    const tempApp = firebaseApp.initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
+    const tempApp = initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
     const tempAuth = getAuth(tempApp);
     
     try {
