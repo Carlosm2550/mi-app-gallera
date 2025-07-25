@@ -1,15 +1,12 @@
 
-
-
-
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
 import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
-import { auth, db, firebaseConfig, initializeApp } from './firebase';
+import { auth, db, firebaseConfig } from './firebase';
+import { initializeApp } from 'firebase/app';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -115,7 +112,7 @@ const findMaximumPairsGreedy = (
             if (areExceptions) continue;
 
             const weightA = convertToGrams(roosterA.weight, roosterA.weightUnit);
-            const weightB = convertToGrams(roosterB.weight, roosterB.weightUnit);
+            const weightB = convertToGrams(b.weight, b.weightUnit);
             const weightDiff = Math.abs(weightA - weightB);
             const ageDiff = Math.abs((roosterA.ageMonths || 1) - (roosterB.ageMonths || 1));
 
@@ -731,11 +728,10 @@ const LiveFightScreen: React.FC<{
   onFinishFight: (fightId: string, winner: 'A' | 'B' | 'DRAW', duration: number) => void;
   onFinishTournament: () => void;
 }> = ({ peleas, torneo, partidosCuerdas, onFinishFight, onFinishTournament }) => {
-  const [currentFightIndex, setCurrentFightIndex] = useState(0);
   const [timer, setTimer] = useState(torneo.fightDuration * 60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
-  const currentFight = peleas[currentFightIndex];
+  const currentFight = peleas[0];
   const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
 
   useEffect(() => {
@@ -754,18 +750,16 @@ const LiveFightScreen: React.FC<{
   
   useEffect(() => {
     // Reset timer for new fight
-    setTimer(torneo.fightDuration * 60);
-    setIsTimerRunning(false);
-  },[currentFightIndex, torneo.fightDuration]);
+    if (currentFight) {
+        setTimer(torneo.fightDuration * 60);
+        setIsTimerRunning(false);
+    }
+  }, [currentFight, torneo.fightDuration]);
 
   const handleFinishFight = (winner: 'A' | 'B' | 'DRAW') => {
+    if (!currentFight) return;
     const duration = (torneo.fightDuration * 60) - timer;
     onFinishFight(currentFight.id, winner, duration);
-    if (currentFightIndex < peleas.length - 1) {
-      setCurrentFightIndex(prev => prev + 1);
-    } else {
-      onFinishTournament();
-    }
   };
   
   const formatTime = (seconds: number) => {
@@ -774,13 +768,12 @@ const LiveFightScreen: React.FC<{
       return `${mins}:${secs}`;
   }
 
+  // This should not be rendered if peleas is empty, parent component handles this.
+  // But as a safeguard:
   if (!currentFight) {
     return (
         <div className="text-center">
-             <h2 className="text-3xl font-bold text-white">No hay más peleas pendientes.</h2>
-             <button onClick={onFinishTournament} className="mt-4 bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-8 rounded-lg text-lg">
-                Continuar
-            </button>
+             <h2 className="text-3xl font-bold text-white">Cargando siguiente fase...</h2>
         </div>
     )
   }
@@ -979,27 +972,18 @@ const ResultsScreen: React.FC<{
 };
 const LoginScreen: React.FC<{
   onLogin: (email: string, pass: string) => Promise<void>;
-  onRegister: (name: string, phone: string, email: string, pass: string) => Promise<void>;
   showNotification: (message: string, type: Notification['type']) => void;
-}> = ({ onLogin, onRegister, showNotification }) => {
-    const [isLoginView, setIsLoginView] = useState(true);
+}> = ({ onLogin, showNotification }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            if (isLoginView) {
-                await onLogin(email, password);
-            } else {
-                await onRegister(name, phone, email, password);
-                showNotification('¡Registro exitoso! Ahora puedes iniciar sesión.', 'success');
-                setIsLoginView(true);
-            }
+            await onLogin(email, password);
+            // Redirection is handled by the parent component's onAuthStateChanged
         } catch (error: any) {
             const message = error.code === 'auth/invalid-credential' 
                 ? 'Correo o contraseña incorrectos.'
@@ -1016,35 +1000,26 @@ const LoginScreen: React.FC<{
                 <div className="text-center">
                     <TrophyIcon className="w-12 h-12 text-amber-400 mx-auto"/>
                     <h2 className="mt-4 text-3xl font-bold text-white">
-                        {isLoginView ? 'Iniciar Sesión' : 'Crear Cuenta'}
+                        Iniciar Sesión
                     </h2>
                     <p className="mt-2 text-sm text-gray-400">
-                        {isLoginView ? 'Bienvenido de nuevo a GalleraPro.' : 'Únete para empezar a gestionar tus torneos.'}
+                        Bienvenido de nuevo a GalleraPro.
                     </p>
                 </div>
 
                 <form className="space-y-6" onSubmit={handleSubmit}>
-                    {!isLoginView && (
-                        <>
-                            <InputField label="Nombre Completo" id="name" type="text" value={name} onChange={e => setName(e.target.value)} required disabled={isLoading} />
-                            <InputField label="Teléfono" id="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} required disabled={isLoading} />
-                        </>
-                    )}
                     <InputField label="Correo Electrónico" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isLoading} />
                     <InputField label="Contraseña" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required disabled={isLoading} />
 
                     <div>
                         <button type="submit" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-900 bg-amber-500 hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 disabled:bg-gray-500" disabled={isLoading}>
-                            {isLoading ? 'Cargando...' : (isLoginView ? 'Entrar' : 'Registrarse')}
+                            {isLoading ? 'Cargando...' : 'Entrar'}
                         </button>
                     </div>
                 </form>
 
                 <p className="text-sm text-center text-gray-400">
-                    {isLoginView ? '¿No tienes cuenta?' : '¿Ya tienes una cuenta?'}
-                    <button onClick={() => setIsLoginView(!isLoginView)} className="font-medium text-amber-400 hover:text-amber-300 ml-1">
-                        {isLoginView ? 'Regístrate' : 'Inicia sesión'}
-                    </button>
+                    Solo para Miembros
                 </p>
             </div>
         </div>
@@ -1053,7 +1028,7 @@ const LoginScreen: React.FC<{
 
 const AdminDashboard: React.FC<{
     users: User[];
-    onAddUser: (name: string, phone: string, email: string, role: 'user' | 'demo') => Promise<void>;
+    onAddUser: (name: string, phone: string, email: string, pass: string, role: 'user' | 'demo') => Promise<void>;
     showNotification: (message: string, type: Notification['type']) => void;
     onBackToApp: () => void;
 }> = ({ users, onAddUser, showNotification, onBackToApp }) => {
@@ -1061,15 +1036,16 @@ const AdminDashboard: React.FC<{
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [role, setRole] = useState<'user' | 'demo'>('user');
 
     const handleAddUserSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await onAddUser(name, phone, email, role);
+            await onAddUser(name, phone, email, password, role);
             showNotification(`Usuario ${role} creado con éxito.`, 'success');
             setAddUserModalOpen(false);
-            setName(''); setPhone(''); setEmail(''); setRole('user');
+            setName(''); setPhone(''); setEmail(''); setPassword(''); setRole('user');
         } catch (error) {
             showNotification('Error al crear usuario.', 'error');
         }
@@ -1124,6 +1100,7 @@ const AdminDashboard: React.FC<{
                     <InputField label="Nombre" value={name} onChange={e => setName(e.target.value)} required />
                     <InputField label="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} required />
                     <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                    <InputField label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                     <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
                         <select value={role} onChange={e => setRole(e.target.value as 'user' | 'demo')} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
@@ -1143,7 +1120,7 @@ const AdminDashboard: React.FC<{
 
 // --- MAIN APP COMPONENT ---
 const App: React.FC = () => {
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SETUP);
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
   const [partidosCuerdas, setPartidosCuerdas] = useState<PartidoCuerda[]>([]);
   const [gallos, setGallos] = useState<Gallo[]>([]);
   const [torneo, setTorneo] = useState<Torneo>({
@@ -1232,17 +1209,20 @@ const App: React.FC = () => {
                  if (userData.role === 'admin') {
                     setupAdminListeners();
                 }
+                setCurrentScreen(Screen.SETUP);
 
             } else {
-                // This case happens for a newly registered user before their doc is created.
-                // handleRegister will create the doc.
+                 // This case happens for a newly registered user before their doc is created.
+                 // This shouldn't happen anymore as registration is admin-only.
+                 signOut(auth); // Log out user if their DB record doesn't exist.
             }
         } else {
             setCurrentUser(null);
             setPartidosCuerdas([]);
             setGallos([]);
+            setAllUsers([]);
             setTorneo(prev => ({...prev, userId: undefined}));
-            // Clear all data
+            setCurrentScreen(Screen.LOGIN);
         }
         setIsLoadingUser(false);
     });
@@ -1299,36 +1279,26 @@ const App: React.FC = () => {
       await signInWithEmailAndPassword(auth, email, pass);
   };
   
-  const handleRegister = async (name: string, phone: string, email: string, pass: string) => {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-    const user = userCredential.user;
-    const userDocRef = doc(db, "users", user.uid);
-    await setDoc(userDocRef, { name, phone, email, role: 'user' });
-    setCurrentUser({ id: user.uid, name, phone, email, role: 'user' });
-    await populateInitialDataForUser(user.uid, 'user', name);
-  };
-  
   const handleLogout = async () => {
       await signOut(auth);
-      setCurrentScreen(Screen.LOGIN);
   };
 
-  const handleAdminAddUser = async (name: string, phone: string, email: string, role: 'user' | 'demo' | 'admin') => {
+  const handleAdminAddUser = async (name: string, phone: string, email: string, pass: string, role: 'user' | 'demo') => {
     // This function needs a temporary Firebase app instance to not conflict with current user session.
     const tempApp = initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
     const tempAuth = getAuth(tempApp);
     
     try {
-        const userCredential = await createUserWithEmailAndPassword(tempAuth, email, "123456"); // Default password
+        const userCredential = await createUserWithEmailAndPassword(tempAuth, email, pass);
         const user = userCredential.user;
         const userDocRef = doc(db, "users", user.uid);
         await setDoc(userDocRef, { name, phone, email, role });
 
-        if (role === 'user' || role === 'demo' || role === 'admin') {
+        if (role === 'user' || role === 'demo') {
             await populateInitialDataForUser(user.uid, role, name);
         }
         
-        showNotification(`Usuario creado con contraseña temporal '123456'.`, 'success');
+        showNotification(`Usuario creado con la contraseña proporcionada.`, 'success');
         
     } catch (error: any) {
         console.error("Error creating user from admin:", error);
@@ -1558,6 +1528,17 @@ const App: React.FC = () => {
         } else if (tournamentPhase === 'individual') {
             fightsForThisPhase = pendingIndividualFights;
         }
+
+        if (fightsForThisPhase.length === 0) {
+            if (tournamentPhase === 'main') {
+                setTournamentPhase('individual');
+                setCurrentScreen(Screen.RESULTS);
+            } else if (tournamentPhase === 'individual') {
+                setTournamentPhase('finished');
+                setCurrentScreen(Screen.RESULTS);
+            }
+            return null; // Don't render if no fights
+        }
         
         const onTournamentPhaseFinished = () => {
             if (tournamentPhase === 'main') {
@@ -1607,8 +1588,6 @@ const App: React.FC = () => {
       }
       case Screen.ADMIN_DASHBOARD:
         return <AdminDashboard users={allUsers} onAddUser={handleAdminAddUser} showNotification={showNotification} onBackToApp={() => setCurrentScreen(Screen.SETUP)} />;
-      case Screen.LOGIN:
-         return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} showNotification={showNotification}/>;
       case Screen.SETUP:
       default:
         return <SetupScreen 
@@ -1636,7 +1615,7 @@ const App: React.FC = () => {
        <Toaster notifications={notifications} onDismiss={(id) => setNotifications(n => n.filter(notif => notif.id !== id))} />
       
        {!currentUser ? (
-          <LoginScreen onLogin={handleLogin} onRegister={handleRegister} showNotification={showNotification} />
+          <LoginScreen onLogin={handleLogin} showNotification={showNotification} />
        ) : (
           <>
             <Header currentUser={currentUser} onLogout={handleLogout} onGoToAdmin={() => setCurrentScreen(Screen.ADMIN_DASHBOARD)} />
