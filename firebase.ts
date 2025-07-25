@@ -19,4 +19,4 @@ const app = initializeApp(firebaseConfig);
 // Export the services we will use throughout the app
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export { firebaseConfig, initializeApp }; // Export config for temporary app instances
+export { firebaseConfig }; // Export config for temporary app instances
