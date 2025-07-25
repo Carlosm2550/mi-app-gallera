@@ -1515,56 +1515,93 @@ const App: React.FC = () => {
     setMatchmakingResults(null);
   };
 
-  const renderScreen = () => {
+ const renderScreen = () => {
     switch(currentScreen) {
-      case Screen.MATCHMAKING:
-        return matchmakingResults ? <MatchmakingScreen 
-    results={matchmakingResults}
-    torneo={torneo}
-    partidosCuerdas={partidosCuerdas}
-    onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
-    onBack={() => {
-      setMatchmakingResults(null);
-      setCurrentScreen(Screen.SETUP);
-    }}
-/>
-               /> : null;
-      case Screen.LIVE_FIGHT: {
+      
+      case Screen.MATCHMAKING: { // Añadimos { para empezar el bloque
+        // Si hay resultados, muestra la pantalla de matchmaking, si no, null.
+        return matchmakingResults ? (
+            <MatchmakingScreen 
+                results={matchmakingResults}
+                torneo={torneo}
+                partidosCuerdas={partidosCuerdas}
+                onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
+                onBack={() => {
+                  setMatchmakingResults(null);
+                  setCurrentScreen(Screen.SETUP);
+                }}
+            />
+        ) : null;
+      } // Añadimos } para cerrar el bloque
+
+      case Screen.LIVE_FIGHT: { // Abrimos bloque
         const allFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
             .sort((a,b) => a.fightNumber - b.fightNumber);
         
-        return <LiveFightScreen 
-                    peleas={allFights.filter(p => p.winner === null)} 
-                    torneo={torneo}
-                    partidosCuerdas={partidosCuerdas}
-                    onFinishFight={handleFinishFight}
-                    onFinishTournament={() => setCurrentScreen(Screen.RESULTS)}
-               />;
-      }
-      case Screen.RESULTS: {
+        return (
+            <LiveFightScreen 
+                peleas={allFights.filter(p => p.winner === null)} 
+                torneo={torneo}
+                partidosCuerdas={partidosCuerdas}
+                onFinishFight={handleFinishFight}
+                onFinishTournament={() => setCurrentScreen(Screen.RESULTS)}
+           />
+        );
+      } // Cerramos bloque
+
+      case Screen.RESULTS: { // Abrimos bloque
         const allFinishedFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
             .sort((a,b) => a.fightNumber - b.fightNumber);
-        return <ResultsScreen peleas={allFinishedFights} torneo={torneo} partidosCuerdas={partidosCuerdas} onReset={handleReset} />;
-      }
-      case Screen.ADMIN_DASHBOARD:
-        return <AdminDashboard users={allUsers} onAddUser={handleAdminAddUser} showNotification={showNotification} onBackToApp={() => setCurrentScreen(Screen.SETUP)} />;
-      case Screen.LOGIN:
-         return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} showNotification={showNotification}/>;
-      case Screen.SETUP:
-      default:
-        return <SetupScreen 
-                    partidosCuerdas={partidosCuerdas}
-                    gallos={gallos}
-                    torneo={torneo}
-                    onUpdateTorneo={handleUpdateTorneo}
-                    onStartMatchmaking={handleStartMatchmaking}
-                    showNotification={showNotification}
-                    onSavePartido={handleSavePartido}
-                    onDeletePartido={handleDeletePartido}
-                    onSaveGallo={handleSaveGallo}
-                    onDeleteGallo={handleDeleteGallo}
-                    isMatchmaking={isMatchmaking}
-                />;
+
+        return (
+            <ResultsScreen 
+                peleas={allFinishedFights} 
+                torneo={torneo} 
+                partidosCuerdas={partidosCuerdas} 
+                onReset={handleReset} 
+            />
+        );
+      } // Cerramos bloque
+
+      case Screen.ADMIN_DASHBOARD: { // Abrimos bloque
+        return (
+            <AdminDashboard 
+                users={allUsers} 
+                onAddUser={handleAdminAddUser} 
+                showNotification={showNotification} 
+                onBackToApp={() => setCurrentScreen(Screen.SETUP)} 
+            />
+        );
+      } // Cerramos bloque
+
+      case Screen.LOGIN: { // Abrimos bloque
+         return (
+            <LoginScreen 
+                onLogin={handleLogin} 
+                onRegister={handleRegister} 
+                showNotification={showNotification}
+            />
+         );
+      } // Cerramos bloque
+      
+      case Screen.SETUP: // Caso por defecto
+      default: { // Abrimos bloque
+        return (
+            <SetupScreen 
+                partidosCuerdas={partidosCuerdas}
+                gallos={gallos}
+                torneo={torneo}
+                onUpdateTorneo={handleUpdateTorneo}
+                onStartMatchmaking={handleStartMatchmaking}
+                showNotification={showNotification}
+                onSavePartido={handleSavePartido}
+                onDeletePartido={handleDeletePartido}
+                onSaveGallo={handleSaveGallo}
+                onDeleteGallo={handleDeleteGallo}
+                isMatchmaking={isMatchmaking}
+            />
+        );
+      } // Cerramos bloque
     }
   }
 
