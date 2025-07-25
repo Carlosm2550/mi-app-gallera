@@ -112,7 +112,7 @@ const findMaximumPairsGreedy = (
             if (areExceptions) continue;
 
             const weightA = convertToGrams(roosterA.weight, roosterA.weightUnit);
-            const weightB = convertToGrams(b.weight, b.weightUnit);
+            const weightB = convertToGrams(roosterB.weight, roosterB.weightUnit);
             const weightDiff = Math.abs(weightA - weightB);
             const ageDiff = Math.abs((roosterA.ageMonths || 1) - (roosterB.ageMonths || 1));
 
