@@ -1236,8 +1236,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
 }, []);
 
-
-  const setupListeners = (userId: string) => {
+const setupListeners = (userId: string) => {
     const partidosQuery = query(collection(db, "partidosCuerdas"), where("userId", "==", userId));
     const gallosQuery = query(collection(db, "gallos"), where("userId", "==", userId));
     const torneoQuery = doc(db, "torneos", userId);
@@ -1250,28 +1249,44 @@ const App: React.FC = () => {
         setGallos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Gallo)));
     });
 
+    // --- SECCIÓN CORREGIDA ---
     const unsubTorneo = onSnapshot(torneoQuery, (doc) => {
+        // Definimos un estado inicial por defecto para asegurarnos de que todas las propiedades existan.
+        const defaultTorneoState: Torneo = {
+            name: "Torneo de Amigos",
+            date: new Date().toISOString().split('T')[0],
+            weightTolerance: 50,
+            ageToleranceMonths: 2,
+            fightDuration: 8,
+            exceptions: [], // Garantiza que 'exceptions' sea siempre un array
+            weightUnit: PesoUnit.GRAMS,
+            rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
+        };
+
         if (doc.exists()) {
-            const data = doc.data() as Torneo;
-            setTorneo(prev => ({
-                ...prev, 
-                ...data,
-                // Ensure nested objects have defaults if they don't exist in DB
-                rondas: data.rondas ?? prev.rondas,
-                ageToleranceMonths: data.ageToleranceMonths ?? prev.ageToleranceMonths,
-            }));
+            const dataFromDb = doc.data() as Partial<Torneo>; // Lo tratamos como parcial por si faltan propiedades
+            // Fusionamos el estado por defecto con los datos de la DB.
+            // Esto asegura que si una propiedad como 'exceptions' no está en la DB, se usará la del estado por defecto (un array vacío).
+            setTorneo({
+                ...defaultTorneoState,
+                ...dataFromDb,
+                userId: userId, // Nos aseguramos de que el userId esté presente
+            });
         } else {
-            // If no tournament settings saved for user, create one.
-             setDoc(doc.ref, { ...torneo, userId });
+            // Si no existe un documento para el usuario, creamos uno con el estado por defecto.
+            const newTorneoData = { ...defaultTorneoState, userId };
+            setTorneo(newTorneoData);
+            setDoc(doc.ref, newTorneoData);
         }
     });
+    // --- FIN DE LA SECCIÓN CORREGIDA ---
 
     return () => {
         unsubPartidos();
         unsubGallos();
         unsubTorneo();
     };
-  };
+};
 
   const setupAdminListeners = () => {
     const usersQuery = query(collection(db, "users"));
