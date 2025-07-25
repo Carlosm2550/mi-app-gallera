@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
@@ -7,7 +9,7 @@ import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
 import { auth, db, firebaseConfig } from './firebase';
-import { initializeApp } from 'firebase/app';
+import * as firebaseApp from 'firebase/app';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -477,7 +479,7 @@ const SetupScreen: React.FC<{
                                     {Object.values(PesoUnit).map(u => <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>)}
                                  </select>
                              </div>
-                             <InputField type="number" label="Tolerancia" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
+                             <InputField type="number" label="Tolerancia de peso" value={torneo.weightTolerance} onChange={(e) => onUpdateTorneo({...torneo, weightTolerance: Number(e.target.value)})} />
                         </div>
                         <InputField type="number" label="Tolerancia de Meses" value={torneo.ageToleranceMonths ?? ''} onChange={(e) => onUpdateTorneo({...torneo, ageToleranceMonths: Number(e.target.value)})} />
                         
@@ -1358,7 +1360,7 @@ const App: React.FC = () => {
 
   const handleAdminAddUser = async (name: string, phone: string, email: string, pass: string, role: 'user' | 'demo') => {
     // This function needs a temporary Firebase app instance to not conflict with current user session.
-    const tempApp = initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
+    const tempApp = firebaseApp.initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
     const tempAuth = getAuth(tempApp);
     
     try {
