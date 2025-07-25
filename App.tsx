@@ -572,49 +572,28 @@ const SetupScreen: React.FC<{
     );
 };
 
-const MatchmakingScreen: React.FC<{ 
-    peleas: Pelea[]; 
+interface MatchmakingResults {
+    mainFights: Pelea[];
+    individualFights: Pelea[];
     unpairedRoosters: Gallo[];
+    stats: {
+        contribution: number;
+        rounds: number;
+        mainTournamentRoostersCount: number;
+    };
+}
+
+const MatchmakingScreen: React.FC<{
+    results: MatchmakingResults;
     torneo: Torneo;
     partidosCuerdas: PartidoCuerda[];
     onStartTournament: () => void;
     onBack: () => void;
-    onGenerateIndividualFights: (roosters: Gallo[]) => Pelea[];
-}> = ({ peleas, unpairedRoosters, torneo, partidosCuerdas, onStartTournament, onBack, onGenerateIndividualFights }) => {
-    
-    const [individualFights, setIndividualFights] = useState<Pelea[]>([]);
-
-    const handleGenerateIndividual = () => {
-        const newFights = onGenerateIndividualFights(unpairedRoosters);
-        setIndividualFights(newFights);
-    };
+    onGenerateIndividualFights: () => void;
+}> = ({ results, torneo, partidosCuerdas, onStartTournament, onBack, onGenerateIndividualFights }) => {
     
     const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
 
-    const initialContribution = useMemo(() => {
-        if (!torneo.rondas.enabled || partidosCuerdas.length < 2) return 0;
-        const partidosConGallos = partidosCuerdas.filter(p => unpairedRoosters.some(g => g.partidoCuerdaId !== p.id));
-        if (partidosConGallos.length < 2) return 0;
-        try {
-            return Math.min(...partidosConGallos.map(p => {
-                const count = unpairedRoosters.filter(g => g.partidoCuerdaId === p.id).length;
-                return count > 0 ? count : Infinity;
-            }).filter(c => c !== Infinity));
-        } catch (e) {
-            return 0;
-        }
-    }, [unpairedRoosters, partidosCuerdas, torneo.rondas.enabled]);
-
-    const numRondas = initialContribution;
-    
-    const stats = {
-        aporte: initialContribution,
-        rondas: numRondas,
-        peleasEnTorneo: peleas.length,
-        gallosEnTorneo: peleas.length * 2,
-        gallosSinPareja: unpairedRoosters.length,
-    };
-    
     const renderPelea = (pelea: Pelea, index: number) => (
         <div key={pelea.id} className="bg-gray-700/50 rounded-lg p-3 flex items-center justify-between text-sm">
             <div className="w-1/12 text-center text-gray-400 font-bold">{index + 1}</div>
@@ -631,6 +610,8 @@ const MatchmakingScreen: React.FC<{
             </div>
         </div>
     );
+    
+    const totalRoostersForIndividualRound = results.unpairedRoosters.length + (results.individualFights.length * 2);
 
     return (
         <div className="space-y-6">
@@ -645,56 +626,65 @@ const MatchmakingScreen: React.FC<{
                     {torneo.rondas.enabled && (
                         <>
                            <div className="bg-gray-700/50 p-3 rounded-lg">
-                               <p className="text-2xl font-bold text-white">{stats.aporte}</p>
+                               <p className="text-2xl font-bold text-white">{results.stats.contribution}</p>
                                <p className="text-sm text-gray-400">Aporte por Equipo</p>
                            </div>
                            <div className="bg-gray-700/50 p-3 rounded-lg">
-                               <p className="text-2xl font-bold text-white">{stats.rondas}</p>
+                               <p className="text-2xl font-bold text-white">{results.stats.rounds}</p>
                                <p className="text-sm text-gray-400">Número de Rondas</p>
                            </div>
                         </>
                     )}
                     <div className="bg-gray-700/50 p-3 rounded-lg">
-                        <p className="text-2xl font-bold text-white">{stats.peleasEnTorneo}</p>
-                        <p className="text-sm text-gray-400">Peleas para el torneo</p>
+                        <p className="text-2xl font-bold text-white">{results.mainFights.length}</p>
+                        <p className="text-sm text-gray-400">Peleas por Rondas</p>
                     </div>
                     <div className="bg-gray-700/50 p-3 rounded-lg">
-                        <p className="text-2xl font-bold text-white">{stats.gallosEnTorneo}</p>
-                        <p className="text-sm text-gray-400">Gallos en el torneo</p>
+                        <p className="text-2xl font-bold text-white">{results.stats.mainTournamentRoostersCount}</p>
+                        <p className="text-sm text-gray-400">Gallos en Rondas</p>
                     </div>
                     <div className="bg-gray-700/50 p-3 rounded-lg">
-                        <p className="text-2xl font-bold text-white">{stats.gallosSinPareja}</p>
-                        <p className="text-sm text-gray-400">Gallos sin Pareja</p>
+                        <p className="text-2xl font-bold text-white">{results.unpairedRoosters.length}</p>
+                        <p className="text-sm text-gray-400">Gallos sin Pelea</p>
                     </div>
                 </div>
             </div>
 
             <div className="space-y-4">
-                {peleas.length > 0 ? (
+                <h3 className="text-xl font-bold text-amber-400">Peleas por Rondas</h3>
+                {results.mainFights.length > 0 ? (
                     <div className="space-y-2">
-                        {peleas.map(renderPelea)}
+                        {results.mainFights.map(renderPelea)}
                     </div>
                 ) : (
                     <p className="text-center text-gray-400 py-6">No se generaron peleas para el torneo principal.</p>
                 )}
             </div>
 
-             {unpairedRoosters.length > 0 && (
+             {totalRoostersForIndividualRound > 0 && (
                 <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 mt-8">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-bold text-amber-400">Peleas Individuales (Sobrantes)</h3>
-                        {individualFights.length === 0 && (
-                             <button onClick={handleGenerateIndividual} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                        {results.individualFights.length === 0 && (
+                             <button onClick={onGenerateIndividualFights} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
                                 Generar Peleas
                              </button>
                         )}
                     </div>
-                    {individualFights.length > 0 ? (
+                    {results.individualFights.length > 0 ? (
                         <div className="space-y-2">
-                            {individualFights.map(renderPelea)}
+                            {results.individualFights.map((pelea, index) => renderPelea(pelea, results.mainFights.length + index))}
                         </div>
                     ) : (
-                        <p className="text-gray-500 text-center py-4">Hay {unpairedRoosters.length} gallos esperando cotejo individual.</p>
+                        <p className="text-gray-500 text-center py-4">Hay {totalRoostersForIndividualRound} gallos esperando cotejo individual.</p>
+                    )}
+                     {results.individualFights.length > 0 && results.unpairedRoosters.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-600">
+                            <h4 className="text-amber-400 mb-2 text-base">Gallos que no encontraron pareja:</h4>
+                            <p className="text-gray-400 text-sm">
+                                {results.unpairedRoosters.map(g => `${g.name} (${formatWeight(g, torneo.weightUnit)})`).join(', ')}
+                            </p>
+                        </div>
                     )}
                 </div>
             )}
@@ -702,7 +692,7 @@ const MatchmakingScreen: React.FC<{
 
             <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4 pt-4">
                 <button onClick={onBack} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto">Volver a Configuración</button>
-                <button onClick={onStartTournament} disabled={peleas.length === 0} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto disabled:bg-gray-500 disabled:cursor-not-allowed">
+                <button onClick={onStartTournament} disabled={results.mainFights.length === 0 && results.individualFights.length === 0} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto disabled:bg-gray-500 disabled:cursor-not-allowed">
                     Iniciar Torneo en Vivo
                 </button>
             </div>
@@ -737,12 +727,16 @@ const LiveFightScreen: React.FC<{
       if (interval) clearInterval(interval);
     };
   }, [isTimerRunning, timer]);
+  
+  useEffect(() => {
+    // Reset timer for new fight
+    setTimer(torneo.fightDuration * 60);
+    setIsTimerRunning(false);
+  },[currentFightIndex, torneo.fightDuration]);
 
   const handleFinishFight = (winner: 'A' | 'B' | 'DRAW') => {
     const duration = (torneo.fightDuration * 60) - timer;
     onFinishFight(currentFight.id, winner, duration);
-    setIsTimerRunning(false);
-    setTimer(torneo.fightDuration * 60);
     if (currentFightIndex < peleas.length - 1) {
       setCurrentFightIndex(prev => prev + 1);
     } else {
@@ -757,7 +751,14 @@ const LiveFightScreen: React.FC<{
   }
 
   if (!currentFight) {
-    return <div>Cargando...</div>
+    return (
+        <div className="text-center">
+             <h2 className="text-3xl font-bold text-white">No hay más peleas pendientes.</h2>
+             <button onClick={onFinishTournament} className="mt-4 bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-8 rounded-lg text-lg">
+                Ver Resultados Finales
+            </button>
+        </div>
+    )
   }
 
   return (
@@ -1111,8 +1112,6 @@ const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SETUP);
   const [partidosCuerdas, setPartidosCuerdas] = useState<PartidoCuerda[]>([]);
   const [gallos, setGallos] = useState<Gallo[]>([]);
-  const [peleas, setPeleas] = useState<Pelea[]>([]);
-  const [unpairedRoosters, setUnpairedRoosters] = useState<Gallo[]>([]);
   const [torneo, setTorneo] = useState<Torneo>({
     name: "Torneo de Amigos",
     date: new Date().toISOString().split('T')[0],
@@ -1123,6 +1122,8 @@ const App: React.FC = () => {
     weightUnit: PesoUnit.GRAMS,
     rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
   });
+  
+  const [matchmakingResults, setMatchmakingResults] = useState<MatchmakingResults | null>(null);
   const [isMatchmaking, setIsMatchmaking] = useState(false);
 
   // Auth & User State
@@ -1386,22 +1387,24 @@ const App: React.FC = () => {
         }
         setIsMatchmaking(true);
     
-        // Use a timeout to allow the UI to update to the loading state before the computation starts
         setTimeout(() => {
             try {
-                let fightsForMainTournament: Pelea[] = [];
-                let roostersForIndividualMatches: Gallo[] = [];
+                let mainFights: Pelea[] = [];
+                let initialUnpairedRoosters: Gallo[] = [];
+                let contribution = 0;
+                let mainTournamentRoostersCount = 0;
     
                 if (torneo.rondas.enabled) {
                     const partidosConGallos = partidosCuerdas.filter(p => gallos.some(g => g.partidoCuerdaId === p.id && g.userId === currentUser?.id));
                     if (partidosConGallos.length < 2) {
-                        showNotification("Se necesitan al menos 2 equipos con gallos para el cotejo por aporte.", 'error');
+                        showNotification("Se necesitan al menos 2 equipos con gallos para el cotejo por rondas.", 'error');
                         setIsMatchmaking(false);
                         return;
                     }
     
                     const contributionSize = Math.min(...partidosConGallos.map(p => gallos.filter(g => g.partidoCuerdaId === p.id).length));
-                    
+                    contribution = contributionSize;
+
                     const teamRoostersForMatching: Gallo[] = [];
                     const teamRoosterIds = new Set<string>();
     
@@ -1415,20 +1418,31 @@ const App: React.FC = () => {
                         selectedRoosters.forEach(r => teamRoosterIds.add(r.id));
                     });
                     
+                    mainTournamentRoostersCount = teamRoostersForMatching.length;
+                    
                     const { fights, leftovers: unpairedFromTeamRound } = findMaximumPairsGreedy(teamRoostersForMatching, torneo);
-                    fightsForMainTournament = fights;
+                    mainFights = fights;
     
                     const roostersOutsideTeamSelection = gallos.filter(g => !teamRoosterIds.has(g.id));
-                    roostersForIndividualMatches = [...unpairedFromTeamRound, ...roostersOutsideTeamSelection];
+                    initialUnpairedRoosters = [...unpairedFromTeamRound, ...roostersOutsideTeamSelection];
+
                 } else {
                     const { fights, leftovers } = findMaximumPairsGreedy(gallos, torneo);
-                    fightsForMainTournament = fights;
-                    roostersForIndividualMatches = leftovers;
+                    mainFights = fights;
+                    initialUnpairedRoosters = leftovers;
+                    mainTournamentRoostersCount = mainFights.length * 2;
                 }
     
-                const finalFights = fightsForMainTournament.map((fight, index) => ({ ...fight, fightNumber: index + 1 }));
-                setPeleas(finalFights);
-                setUnpairedRoosters(roostersForIndividualMatches);
+                setMatchmakingResults({
+                    mainFights: mainFights.map((fight, index) => ({ ...fight, fightNumber: index + 1 })),
+                    individualFights: [],
+                    unpairedRoosters: initialUnpairedRoosters,
+                    stats: {
+                        contribution,
+                        rounds: contribution,
+                        mainTournamentRoostersCount,
+                    }
+                });
                 setCurrentScreen(Screen.MATCHMAKING);
     
             } catch (error) {
@@ -1437,51 +1451,77 @@ const App: React.FC = () => {
             } finally {
                 setIsMatchmaking(false);
             }
-        }, 50); // Small timeout to let loading state render
+        }, 50);
     };
 
-    const handleGenerateIndividualFights = (roosters: Gallo[]): Pelea[] => {
-        const { fights } = findMaximumPairsGreedy(roosters, torneo);
-        const pairedInIndividualRound = new Set(fights.flatMap(f => [f.roosterA.id, f.roosterB.id]));
-        
-        // Update the main unpaired list
-        setUnpairedRoosters(prev => prev.filter(r => !pairedInIndividualRound.has(r.id)));
+    const handleGenerateIndividualFights = () => {
+        if (!matchmakingResults) return;
 
-        return fights.map((f, i) => ({...f, fightNumber: peleas.length + i + 1}));
+        const { fights, leftovers } = findMaximumPairsGreedy(matchmakingResults.unpairedRoosters, torneo);
+        
+        const newIndividualFights = fights.map((f, i) => ({...f, fightNumber: matchmakingResults.mainFights.length + matchmakingResults.individualFights.length + i + 1}));
+
+        setMatchmakingResults(prev => {
+            if (!prev) return null;
+            return {
+                ...prev,
+                individualFights: [...prev.individualFights, ...newIndividualFights],
+                unpairedRoosters: leftovers,
+            };
+        });
     };
 
   const handleFinishFight = (fightId: string, winner: 'A' | 'B' | 'DRAW', duration: number) => {
-      setPeleas(prev => prev.map(p => p.id === fightId ? { ...p, winner, duration } : p));
+      setMatchmakingResults(prev => {
+        if (!prev) return null;
+        
+        const updateFights = (fights: Pelea[]) => 
+            fights.map(p => p.id === fightId ? { ...p, winner, duration } : p);
+
+        return {
+            ...prev,
+            mainFights: updateFights(prev.mainFights),
+            individualFights: updateFights(prev.individualFights),
+        };
+    });
   };
   
   const handleReset = () => {
     setCurrentScreen(Screen.SETUP);
-    setPeleas([]);
-    setUnpairedRoosters([]);
+    setMatchmakingResults(null);
   };
 
   const renderScreen = () => {
     switch(currentScreen) {
       case Screen.MATCHMAKING:
-        return <MatchmakingScreen 
-                    peleas={peleas}
-                    unpairedRoosters={unpairedRoosters}
+        return matchmakingResults ? <MatchmakingScreen 
+                    results={matchmakingResults}
                     torneo={torneo}
                     partidosCuerdas={partidosCuerdas}
                     onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
-                    onBack={() => setCurrentScreen(Screen.SETUP)}
+                    onBack={() => {
+                      setMatchmakingResults(null);
+                      setCurrentScreen(Screen.SETUP);
+                    }}
                     onGenerateIndividualFights={handleGenerateIndividualFights}
-               />;
-      case Screen.LIVE_FIGHT:
+               /> : null;
+      case Screen.LIVE_FIGHT: {
+        const allFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
+            .sort((a,b) => a.fightNumber - b.fightNumber);
+        
         return <LiveFightScreen 
-                    peleas={peleas.filter(p => p.winner === null)} 
+                    peleas={allFights.filter(p => p.winner === null)} 
                     torneo={torneo}
                     partidosCuerdas={partidosCuerdas}
                     onFinishFight={handleFinishFight}
                     onFinishTournament={() => setCurrentScreen(Screen.RESULTS)}
                />;
-      case Screen.RESULTS:
-        return <ResultsScreen peleas={peleas} torneo={torneo} partidosCuerdas={partidosCuerdas} onReset={handleReset} />;
+      }
+      case Screen.RESULTS: {
+        const allFinishedFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
+            .sort((a,b) => a.fightNumber - b.fightNumber);
+        return <ResultsScreen peleas={allFinishedFights} torneo={torneo} partidosCuerdas={partidosCuerdas} onReset={handleReset} />;
+      }
       case Screen.ADMIN_DASHBOARD:
         return <AdminDashboard users={allUsers} onAddUser={handleAdminAddUser} showNotification={showNotification} onBackToApp={() => setCurrentScreen(Screen.SETUP)} />;
       case Screen.LOGIN:
