@@ -461,7 +461,7 @@ const SetupScreen: React.FC<{
                         
                         <div className="border-t border-gray-700 my-4"></div>
                         <div className="flex items-center justify-between">
-                            <label htmlFor="rondas-toggle" className="text-white font-medium text-sm sm:text-base">Cotejo por aporte de equipo</label>
+                            <label htmlFor="rondas-toggle" className="text-white font-medium text-sm sm:text-base">Cotejo por rondas</label>
                             <ToggleSwitch
                                 id="rondas-toggle"
                                 checked={torneo.rondas.enabled}
