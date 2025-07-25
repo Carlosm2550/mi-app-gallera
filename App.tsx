@@ -78,10 +78,10 @@ const findMaximumPairsGreedy = (
     torneo: Torneo
 ): { fights: Pelea[], leftovers: Gallo[] } => {
     const fights: Pelea[] = [];
-    // Use a Set for efficient add/delete of available roosters
+    // Usar un Set para poder eliminar gallos de forma eficiente una vez emparejados.
     let availableRoosters = new Set(roostersToMatch);
 
-    // Sort the initial list to process in a consistent order (by weight, then by age)
+    // Ordenar la lista inicial para procesar de manera consistente (por peso, luego por edad).
     const sortedRoosters = [...roostersToMatch].sort((a, b) => {
         const weightA = convertToGrams(a.weight, a.weightUnit);
         const weightB = convertToGrams(b.weight, b.weightUnit);
@@ -92,22 +92,24 @@ const findMaximumPairsGreedy = (
     });
 
     for (const roosterA of sortedRoosters) {
-        // If roosterA has already been paired, skip it
+        // Si el gallo A ya fue emparejado en una iteración anterior, lo saltamos.
         if (!availableRoosters.has(roosterA)) {
             continue;
         }
 
         let bestPartner: Gallo | null = null;
+        // Usaremos un 'score' para determinar la "mejor" pareja. Un score más bajo es mejor.
         let bestScore = Infinity;
 
-        // Iterate through all *other* available roosters
+        // Iteramos sobre todos los gallos que TODAVÍA ESTÁN DISPONIBLES.
         for (const roosterB of availableRoosters) {
+            // Un gallo no puede pelear consigo mismo.
             if (roosterA.id === roosterB.id) continue;
             
-            // Check rules: same team
+            // Regla: No pueden ser del mismo equipo.
             if (roosterA.partidoCuerdaId === roosterB.partidoCuerdaId) continue;
             
-            // Check rules: exceptions
+            // Regla: No pueden estar en la lista de excepciones.
             const areExceptions = torneo.exceptions.some(pair =>
                 (pair.includes(roosterA.partidoCuerdaId) && pair.includes(roosterB.partidoCuerdaId))
             );
@@ -118,11 +120,12 @@ const findMaximumPairsGreedy = (
             const weightDiff = Math.abs(weightA - weightB);
             const ageDiff = Math.abs((roosterA.ageMonths || 1) - (roosterB.ageMonths || 1));
 
-            // Check if the pair is valid according to tolerances
+            // Verificamos si la pareja es VÁLIDA según las tolerancias.
             if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0)) {
-                // It's a valid pair, calculate its score to find the best one.
-                // A lower score is better. Prioritize weight difference heavily.
-                const score = weightDiff + (ageDiff * 100); // 1 month diff is "worth" 100g diff
+                // Si es válida, calculamos su "calidad" o "score".
+                // Priorizamos la diferencia de peso, pero la de edad también cuenta.
+                // Ejemplo de puntuación: 1 mes de diferencia "cuesta" lo mismo que 100g.
+                const score = weightDiff + (ageDiff * 100); 
                 
                 if (score < bestScore) {
                     bestScore = score;
@@ -131,22 +134,24 @@ const findMaximumPairsGreedy = (
             }
         }
 
-        // If a best partner was found, create the fight and remove both from the available pool
+        // Si se encontró la mejor pareja posible para roosterA...
         if (bestPartner) {
+            // Se crea la pelea.
             fights.push({
                 id: `fight-${Date.now()}-${Math.random()}`,
-                fightNumber: 0, // Will be assigned later
+                fightNumber: 0, // El número de pelea se asignará más tarde.
                 roosterA: roosterA,
                 roosterB: bestPartner,
                 winner: null,
                 duration: null,
             });
+            // IMPORTANTE: Se eliminan AMBOS gallos del pool de disponibles.
             availableRoosters.delete(roosterA);
             availableRoosters.delete(bestPartner);
         }
     }
 
-    // Whatever is left in the set are the leftovers
+    // Lo que quede en el Set son los gallos que no encontraron pareja.
     const leftovers = Array.from(availableRoosters);
     return { fights, leftovers };
 };
