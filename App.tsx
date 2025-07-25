@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
@@ -76,24 +77,37 @@ const findMaximumPairsGreedy = (
     roostersToMatch: Gallo[],
     torneo: Torneo
 ): { fights: Pelea[], leftovers: Gallo[] } => {
-    let availableRoosters = [...roostersToMatch];
     const fights: Pelea[] = [];
-    const pairedIds = new Set<string>();
+    // Use a Set for efficient add/delete of available roosters
+    let availableRoosters = new Set(roostersToMatch);
 
-    availableRoosters.sort((a,b) => convertToGrams(a.weight, a.weightUnit) - convertToGrams(b.weight, b.weightUnit));
+    // Sort the initial list to process in a consistent order (by weight, then by age)
+    const sortedRoosters = [...roostersToMatch].sort((a, b) => {
+        const weightA = convertToGrams(a.weight, a.weightUnit);
+        const weightB = convertToGrams(b.weight, b.weightUnit);
+        if (weightA !== weightB) {
+            return weightA - weightB;
+        }
+        return (a.ageMonths || 0) - (b.ageMonths || 0);
+    });
 
-    for (let i = 0; i < availableRoosters.length; i++) {
-        const roosterA = availableRoosters[i];
-        if (pairedIds.has(roosterA.id)) continue;
+    for (const roosterA of sortedRoosters) {
+        // If roosterA has already been paired, skip it
+        if (!availableRoosters.has(roosterA)) {
+            continue;
+        }
 
         let bestPartner: Gallo | null = null;
-        let smallestWeightDiff = Infinity;
+        let bestScore = Infinity;
 
-        for (let j = i + 1; j < availableRoosters.length; j++) {
-            const roosterB = availableRoosters[j];
-            if (pairedIds.has(roosterB.id)) continue;
+        // Iterate through all *other* available roosters
+        for (const roosterB of availableRoosters) {
+            if (roosterA.id === roosterB.id) continue;
+            
+            // Check rules: same team
             if (roosterA.partidoCuerdaId === roosterB.partidoCuerdaId) continue;
-
+            
+            // Check rules: exceptions
             const areExceptions = torneo.exceptions.some(pair =>
                 (pair.includes(roosterA.partidoCuerdaId) && pair.includes(roosterB.partidoCuerdaId))
             );
@@ -104,27 +118,36 @@ const findMaximumPairsGreedy = (
             const weightDiff = Math.abs(weightA - weightB);
             const ageDiff = Math.abs((roosterA.ageMonths || 1) - (roosterB.ageMonths || 1));
 
-            if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0) && weightDiff < smallestWeightDiff) {
-                smallestWeightDiff = weightDiff;
-                bestPartner = roosterB;
+            // Check if the pair is valid according to tolerances
+            if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0)) {
+                // It's a valid pair, calculate its score to find the best one.
+                // A lower score is better. Prioritize weight difference heavily.
+                const score = weightDiff + (ageDiff * 100); // 1 month diff is "worth" 100g diff
+                
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestPartner = roosterB;
+                }
             }
         }
 
+        // If a best partner was found, create the fight and remove both from the available pool
         if (bestPartner) {
             fights.push({
-                id: `fight-indiv-${Date.now()}-${Math.random()}`,
-                fightNumber: 0,
+                id: `fight-${Date.now()}-${Math.random()}`,
+                fightNumber: 0, // Will be assigned later
                 roosterA: roosterA,
                 roosterB: bestPartner,
                 winner: null,
                 duration: null,
             });
-            pairedIds.add(roosterA.id);
-            pairedIds.add(bestPartner.id);
+            availableRoosters.delete(roosterA);
+            availableRoosters.delete(bestPartner);
         }
     }
 
-    const leftovers = availableRoosters.filter(r => !pairedIds.has(r.id));
+    // Whatever is left in the set are the leftovers
+    const leftovers = Array.from(availableRoosters);
     return { fights, leftovers };
 };
 
