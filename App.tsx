@@ -1,13 +1,15 @@
 
 
 
+
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
 import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
-import { auth, db, firebaseConfig } from './firebase';
+import { auth, db, firebaseConfig, initializeApp } from './firebase';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -29,7 +31,6 @@ import {
     getDocs,
     updateDoc
 } from "firebase/firestore";
-import { initializeApp } from 'firebase/app';
 import { DEMO_GALLERAS } from './constants';
 
 
@@ -78,10 +79,10 @@ const findMaximumPairsGreedy = (
     torneo: Torneo
 ): { fights: Pelea[], leftovers: Gallo[] } => {
     const fights: Pelea[] = [];
-    // Usar un Set para poder eliminar gallos de forma eficiente una vez emparejados.
+    // Use a Set for efficient add/delete of available roosters
     let availableRoosters = new Set(roostersToMatch);
 
-    // Ordenar la lista inicial para procesar de manera consistente (por peso, luego por edad).
+    // Sort the initial list to process in a consistent order (by weight, then by age)
     const sortedRoosters = [...roostersToMatch].sort((a, b) => {
         const weightA = convertToGrams(a.weight, a.weightUnit);
         const weightB = convertToGrams(b.weight, b.weightUnit);
@@ -92,24 +93,22 @@ const findMaximumPairsGreedy = (
     });
 
     for (const roosterA of sortedRoosters) {
-        // Si el gallo A ya fue emparejado en una iteración anterior, lo saltamos.
+        // If roosterA has already been paired, skip it
         if (!availableRoosters.has(roosterA)) {
             continue;
         }
 
         let bestPartner: Gallo | null = null;
-        // Usaremos un 'score' para determinar la "mejor" pareja. Un score más bajo es mejor.
         let bestScore = Infinity;
 
-        // Iteramos sobre todos los gallos que TODAVÍA ESTÁN DISPONIBLES.
+        // Iterate through all *other* available roosters
         for (const roosterB of availableRoosters) {
-            // Un gallo no puede pelear consigo mismo.
             if (roosterA.id === roosterB.id) continue;
             
-            // Regla: No pueden ser del mismo equipo.
+            // Check rules: same team
             if (roosterA.partidoCuerdaId === roosterB.partidoCuerdaId) continue;
             
-            // Regla: No pueden estar en la lista de excepciones.
+            // Check rules: exceptions
             const areExceptions = torneo.exceptions.some(pair =>
                 (pair.includes(roosterA.partidoCuerdaId) && pair.includes(roosterB.partidoCuerdaId))
             );
@@ -120,12 +119,11 @@ const findMaximumPairsGreedy = (
             const weightDiff = Math.abs(weightA - weightB);
             const ageDiff = Math.abs((roosterA.ageMonths || 1) - (roosterB.ageMonths || 1));
 
-            // Verificamos si la pareja es VÁLIDA según las tolerancias.
+            // Check if the pair is valid according to tolerances
             if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0)) {
-                // Si es válida, calculamos su "calidad" o "score".
-                // Priorizamos la diferencia de peso, pero la de edad también cuenta.
-                // Ejemplo de puntuación: 1 mes de diferencia "cuesta" lo mismo que 100g.
-                const score = weightDiff + (ageDiff * 100); 
+                // It's a valid pair, calculate its score to find the best one.
+                // A lower score is better. Prioritize weight difference heavily.
+                const score = weightDiff + (ageDiff * 100); // 1 month diff is "worth" 100g diff
                 
                 if (score < bestScore) {
                     bestScore = score;
@@ -134,24 +132,22 @@ const findMaximumPairsGreedy = (
             }
         }
 
-        // Si se encontró la mejor pareja posible para roosterA...
+        // If a best partner was found, create the fight and remove both from the available pool
         if (bestPartner) {
-            // Se crea la pelea.
             fights.push({
                 id: `fight-${Date.now()}-${Math.random()}`,
-                fightNumber: 0, // El número de pelea se asignará más tarde.
+                fightNumber: 0, // Will be assigned later
                 roosterA: roosterA,
                 roosterB: bestPartner,
                 winner: null,
                 duration: null,
             });
-            // IMPORTANTE: Se eliminan AMBOS gallos del pool de disponibles.
             availableRoosters.delete(roosterA);
             availableRoosters.delete(bestPartner);
         }
     }
 
-    // Lo que quede en el Set son los gallos que no encontraron pareja.
+    // Whatever is left in the set are the leftovers
     const leftovers = Array.from(availableRoosters);
     return { fights, leftovers };
 };
@@ -617,8 +613,9 @@ const MatchmakingScreen: React.FC<{
     partidosCuerdas: PartidoCuerda[];
     onStartTournament: () => void;
     onBack: () => void;
-}> = ({ results, torneo, partidosCuerdas, onStartTournament, onBack }) => {
-  
+    onGenerateIndividualFights: () => void;
+}> = ({ results, torneo, partidosCuerdas, onStartTournament, onBack, onGenerateIndividualFights }) => {
+    
     const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
 
     const renderPelea = (pelea: Pelea, index: number) => (
@@ -654,11 +651,11 @@ const MatchmakingScreen: React.FC<{
                         <>
                            <div className="bg-gray-700/50 p-3 rounded-lg">
                                <p className="text-2xl font-bold text-white">{results.stats.contribution}</p>
-                               <p className="text-sm text-gray-400">Aporte por Equipo</p>
+                               <p className="text-sm text-gray-400">Gallos por equipo</p>
                            </div>
                            <div className="bg-gray-700/50 p-3 rounded-lg">
-                               <p className="text-2xl font-bold text-white">{results.stats.rounds}</p>
-                               <p className="text-sm text-gray-400">Número de Rondas</p>
+                               <p className="text-2xl font-bold text-white">{results.individualFights.length}</p>
+                               <p className="text-sm text-gray-400">Peleas Individuales</p>
                            </div>
                         </>
                     )}
@@ -668,7 +665,7 @@ const MatchmakingScreen: React.FC<{
                     </div>
                     <div className="bg-gray-700/50 p-3 rounded-lg">
                         <p className="text-2xl font-bold text-white">{results.stats.mainTournamentRoostersCount}</p>
-                        <p className="text-sm text-gray-400">Gallos en Rondas</p>
+                        <p className="text-sm text-gray-400">Gallos aptos</p>
                     </div>
                     <div className="bg-gray-700/50 p-3 rounded-lg">
                         <p className="text-2xl font-bold text-white">{results.unpairedRoosters.length}</p>
@@ -692,7 +689,11 @@ const MatchmakingScreen: React.FC<{
                 <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 mt-8">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-bold text-amber-400">Peleas Individuales (Sobrantes)</h3>
-                       
+                        {results.individualFights.length === 0 && (
+                             <button onClick={onGenerateIndividualFights} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                                Generar Peleas
+                             </button>
+                        )}
                     </div>
                     {results.individualFights.length > 0 ? (
                         <div className="space-y-2">
@@ -738,7 +739,7 @@ const LiveFightScreen: React.FC<{
   const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (isTimerRunning && timer > 0) {
       interval = setInterval(() => {
         setTimer(prev => prev - 1);
@@ -778,7 +779,7 @@ const LiveFightScreen: React.FC<{
         <div className="text-center">
              <h2 className="text-3xl font-bold text-white">No hay más peleas pendientes.</h2>
              <button onClick={onFinishTournament} className="mt-4 bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-8 rounded-lg text-lg">
-                Ver Resultados Finales
+                Continuar
             </button>
         </div>
     )
@@ -787,7 +788,7 @@ const LiveFightScreen: React.FC<{
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-white">Pelea #{currentFight.fightNumber} de {peleas.length}</h2>
+        <h2 className="text-3xl font-bold text-white">Pelea #{currentFight.fightNumber} de {peleas.reduce((acc, p) => p.fightNumber > acc ? p.fightNumber : acc, 0)}</h2>
       </div>
 
       <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-6">
@@ -838,7 +839,10 @@ const ResultsScreen: React.FC<{
     torneo: Torneo;
     partidosCuerdas: PartidoCuerda[];
     onReset: () => void;
-}> = ({ peleas, torneo, partidosCuerdas, onReset }) => {
+    tournamentPhase: 'individual' | 'finished';
+    onStartIndividualFights: () => void;
+    hasIndividualFights: boolean;
+}> = ({ peleas, torneo, partidosCuerdas, onReset, tournamentPhase, onStartIndividualFights, hasIndividualFights }) => {
     
     const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
     
@@ -861,11 +865,12 @@ const ResultsScreen: React.FC<{
 
             const idA = pelea.roosterA.partidoCuerdaId;
             const idB = pelea.roosterB.partidoCuerdaId;
+            const isRoundFight = torneo.rondas.enabled && pelea.isRoundFight;
 
             if(pelea.winner === 'A') {
                 if(statsMap[idA]) {
                     statsMap[idA].wins++;
-                    statsMap[idA].points += torneo.rondas.pointsForWin;
+                    if(isRoundFight) statsMap[idA].points += torneo.rondas.pointsForWin;
                 }
                  if(statsMap[idB]) {
                     statsMap[idB].losses++;
@@ -873,7 +878,7 @@ const ResultsScreen: React.FC<{
             } else if (pelea.winner === 'B') {
                  if(statsMap[idB]) {
                     statsMap[idB].wins++;
-                    statsMap[idB].points += torneo.rondas.pointsForWin;
+                    if(isRoundFight) statsMap[idB].points += torneo.rondas.pointsForWin;
                 }
                 if(statsMap[idA]) {
                     statsMap[idA].losses++;
@@ -881,11 +886,11 @@ const ResultsScreen: React.FC<{
             } else if (pelea.winner === 'DRAW') {
                 if(statsMap[idA]) {
                     statsMap[idA].draws++;
-                    statsMap[idA].points += torneo.rondas.pointsForDraw;
+                    if(isRoundFight) statsMap[idA].points += torneo.rondas.pointsForDraw;
                 }
                  if(statsMap[idB]) {
                     statsMap[idB].draws++;
-                    statsMap[idB].points += torneo.rondas.pointsForDraw;
+                    if(isRoundFight) statsMap[idB].points += torneo.rondas.pointsForDraw;
                 }
             }
         });
@@ -959,9 +964,15 @@ const ResultsScreen: React.FC<{
             </div>
 
             <div className="text-center mt-8">
-                 <button onClick={onReset} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-8 rounded-lg text-lg">
-                    Crear Nuevo Torneo
-                </button>
+                 {tournamentPhase === 'individual' && hasIndividualFights ? (
+                    <button onClick={onStartIndividualFights} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                        Iniciar Peleas Individuales
+                    </button>
+                 ) : (
+                    <button onClick={onReset} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-8 rounded-lg text-lg">
+                        Crear Nuevo Torneo
+                    </button>
+                 )}
             </div>
         </div>
     );
@@ -1148,6 +1159,8 @@ const App: React.FC = () => {
   
   const [matchmakingResults, setMatchmakingResults] = useState<MatchmakingResults | null>(null);
   const [isMatchmaking, setIsMatchmaking] = useState(false);
+  const [tournamentPhase, setTournamentPhase] = useState<'main' | 'individual' | 'finished'>('main');
+
 
   // Auth & User State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1236,7 +1249,8 @@ const App: React.FC = () => {
     return () => unsubscribe();
 }, []);
 
-const setupListeners = (userId: string) => {
+
+  const setupListeners = (userId: string) => {
     const partidosQuery = query(collection(db, "partidosCuerdas"), where("userId", "==", userId));
     const gallosQuery = query(collection(db, "gallos"), where("userId", "==", userId));
     const torneoQuery = doc(db, "torneos", userId);
@@ -1249,44 +1263,28 @@ const setupListeners = (userId: string) => {
         setGallos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Gallo)));
     });
 
-    // --- SECCIÓN CORREGIDA ---
     const unsubTorneo = onSnapshot(torneoQuery, (doc) => {
-        // Definimos un estado inicial por defecto para asegurarnos de que todas las propiedades existan.
-        const defaultTorneoState: Torneo = {
-            name: "Torneo de Amigos",
-            date: new Date().toISOString().split('T')[0],
-            weightTolerance: 50,
-            ageToleranceMonths: 2,
-            fightDuration: 8,
-            exceptions: [], // Garantiza que 'exceptions' sea siempre un array
-            weightUnit: PesoUnit.GRAMS,
-            rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
-        };
-
         if (doc.exists()) {
-            const dataFromDb = doc.data() as Partial<Torneo>; // Lo tratamos como parcial por si faltan propiedades
-            // Fusionamos el estado por defecto con los datos de la DB.
-            // Esto asegura que si una propiedad como 'exceptions' no está en la DB, se usará la del estado por defecto (un array vacío).
-            setTorneo({
-                ...defaultTorneoState,
-                ...dataFromDb,
-                userId: userId, // Nos aseguramos de que el userId esté presente
-            });
+            const data = doc.data() as Torneo;
+            setTorneo(prev => ({
+                ...prev, 
+                ...data,
+                // Ensure nested objects have defaults if they don't exist in DB
+                rondas: data.rondas ?? prev.rondas,
+                ageToleranceMonths: data.ageToleranceMonths ?? prev.ageToleranceMonths,
+            }));
         } else {
-            // Si no existe un documento para el usuario, creamos uno con el estado por defecto.
-            const newTorneoData = { ...defaultTorneoState, userId };
-            setTorneo(newTorneoData);
-            setDoc(doc.ref, newTorneoData);
+            // If no tournament settings saved for user, create one.
+             setDoc(doc.ref, { ...torneo, userId });
         }
     });
-    // --- FIN DE LA SECCIÓN CORREGIDA ---
 
     return () => {
         unsubPartidos();
         unsubGallos();
         unsubTorneo();
     };
-};
+  };
 
   const setupAdminListeners = () => {
     const usersQuery = query(collection(db, "users"));
@@ -1418,98 +1416,97 @@ const setupListeners = (userId: string) => {
       }
   };
 
-   const handleStartMatchmaking = async () => {
-    if (gallos.length < 2) {
-        showNotification("Se necesitan al menos 2 gallos para empezar.", 'error');
-        return;
-    }
-    setIsMatchmaking(true);
-
-    // Usamos un pequeño timeout para que el UI se actualice y muestre "Cotejando..."
-    setTimeout(() => {
-        try {
-            let finalMainFights: Pelea[] = [];
-            let finalIndividualFights: Pelea[] = [];
-            let finalUnpairedRoosters: Gallo[] = [];
-            
-            let contribution = 0;
-            let mainTournamentRoostersCount = 0;
-
-            if (torneo.rondas.enabled) {
-                // --- FASE 1: COTEJO POR EQUIPOS ---
-                const partidosConGallos = partidosCuerdas.filter(p => gallos.some(g => g.partidoCuerdaId === p.id && g.userId === currentUser?.id));
-                if (partidosConGallos.length < 2) {
-                    showNotification("Se necesitan al menos 2 equipos con gallos para el cotejo por rondas.", 'error');
-                    setIsMatchmaking(false);
-                    return;
-                }
-
-                // Determinar el aporte
-                contribution = Math.min(...partidosConGallos.map(p => gallos.filter(g => g.partidoCuerdaId === p.id).length));
-                if (contribution === 0) {
-                     showNotification("Los equipos deben tener al menos un gallo para el cotejo por rondas.", 'error');
-                     setIsMatchmaking(false);
-                     return;
-                }
-
-                // Seleccionar los gallos para el torneo por equipos
-                const teamRoostersForMatching: Gallo[] = [];
-                const teamRoosterIds = new Set<string>();
-                partidosConGallos.forEach(p => {
-                    const teamRoosters = gallos
-                        .filter(g => g.partidoCuerdaId === p.id)
-                        .sort((a, b) => convertToGrams(a.weight, a.weightUnit) - convertToGrams(b.weight, b.weightUnit))
-                        .slice(0, contribution);
-                    
-                    teamRoostersForMatching.push(...teamRoosters);
-                    teamRoosters.forEach(r => teamRoosterIds.add(r.id));
-                });
-                
-                mainTournamentRoostersCount = teamRoostersForMatching.length;
-                
-                // Realizar el primer cotejo (solo con los de equipos)
-                const { fights: mainFightsResult, leftovers: unpairedFromTeamRound } = findMaximumPairsGreedy(teamRoostersForMatching, torneo);
-                finalMainFights = mainFightsResult;
-
-                // --- FASE 2: COTEJO DE SOBRANTES ---
-                // Juntar a los sobrantes del primer cotejo con los que nunca fueron seleccionados
-                const roostersOutsideTeamSelection = gallos.filter(g => !teamRoosterIds.has(g.id));
-                const individualPool = [...unpairedFromTeamRound, ...roostersOutsideTeamSelection];
-
-                // Realizar el segundo cotejo con todos los sobrantes
-                const { fights: individualFightsResult, leftovers: finalLeftovers } = findMaximumPairsGreedy(individualPool, torneo);
-                finalIndividualFights = individualFightsResult;
-                finalUnpairedRoosters = finalLeftovers;
-
-            } else {
-                // Si el modo rondas está desactivado, todos los gallos van a un solo cotejo.
-                const { fights, leftovers } = findMaximumPairsGreedy(gallos, torneo);
-                finalMainFights = fights; // Tratamos todas las peleas como "principales"
-                finalUnpairedRoosters = leftovers;
-                mainTournamentRoostersCount = finalMainFights.length * 2;
-            }
-
-            // Guardar los resultados finales y completos
-            setMatchmakingResults({
-                mainFights: finalMainFights.map((fight, index) => ({ ...fight, fightNumber: index + 1 })),
-                individualFights: finalIndividualFights.map((fight, index) => ({ ...fight, fightNumber: finalMainFights.length + index + 1 })),
-                unpairedRoosters: finalUnpairedRoosters,
-                stats: {
-                    contribution,
-                    rounds: contribution, // En tu UI, 'Número de Rondas' se muestra como el aporte
-                    mainTournamentRoostersCount,
-                }
-            });
-            setCurrentScreen(Screen.MATCHMAKING);
-
-        } catch (error) {
-            console.error("Error during matchmaking:", error);
-            showNotification("Ocurrió un error inesperado durante el cotejo.", "error");
-        } finally {
-            setIsMatchmaking(false);
+    const handleStartMatchmaking = async () => {
+        if (gallos.length < 2) {
+            showNotification("Se necesitan al menos 2 gallos para empezar.", 'error');
+            return;
         }
-    }, 50);
-};
+        setIsMatchmaking(true);
+    
+        setTimeout(() => {
+            try {
+                let mainFights: Pelea[] = [];
+                let initialUnpairedRoosters: Gallo[] = [];
+                let contribution = 0;
+                let mainTournamentRoostersCount = 0;
+    
+                if (torneo.rondas.enabled) {
+                    const partidosConGallos = partidosCuerdas.filter(p => gallos.some(g => g.partidoCuerdaId === p.id && g.userId === currentUser?.id));
+                    if (partidosConGallos.length < 2) {
+                        showNotification("Se necesitan al menos 2 equipos con gallos para el cotejo por rondas.", 'error');
+                        setIsMatchmaking(false);
+                        return;
+                    }
+    
+                    const contributionSize = Math.min(...partidosConGallos.map(p => gallos.filter(g => g.partidoCuerdaId === p.id).length));
+                    contribution = contributionSize;
+
+                    const teamRoostersForMatching: Gallo[] = [];
+                    const teamRoosterIds = new Set<string>();
+    
+                    partidosConGallos.forEach(p => {
+                        const teamRoosters = gallos
+                            .filter(g => g.partidoCuerdaId === p.id)
+                            .sort((a, b) => convertToGrams(a.weight, a.weightUnit) - convertToGrams(b.weight, b.weightUnit));
+                        
+                        const selectedRoosters = teamRoosters.slice(0, contributionSize);
+                        teamRoostersForMatching.push(...selectedRoosters);
+                        selectedRoosters.forEach(r => teamRoosterIds.add(r.id));
+                    });
+                    
+                    mainTournamentRoostersCount = teamRoostersForMatching.length;
+                    
+                    const { fights, leftovers: unpairedFromTeamRound } = findMaximumPairsGreedy(teamRoostersForMatching, torneo);
+                    mainFights = fights;
+    
+                    const roostersOutsideTeamSelection = gallos.filter(g => !teamRoosterIds.has(g.id));
+                    initialUnpairedRoosters = [...unpairedFromTeamRound, ...roostersOutsideTeamSelection];
+
+                } else {
+                    const { fights, leftovers } = findMaximumPairsGreedy(gallos, torneo);
+                    mainFights = fights;
+                    initialUnpairedRoosters = leftovers;
+                    mainTournamentRoostersCount = mainFights.length * 2;
+                }
+    
+                setMatchmakingResults({
+                    mainFights: mainFights.map((fight, index) => ({ ...fight, fightNumber: index + 1, isRoundFight: torneo.rondas.enabled })),
+                    individualFights: [],
+                    unpairedRoosters: initialUnpairedRoosters,
+                    stats: {
+                        contribution,
+                        rounds: contribution,
+                        mainTournamentRoostersCount,
+                    }
+                });
+                setCurrentScreen(Screen.MATCHMAKING);
+    
+            } catch (error) {
+                console.error("Error during matchmaking:", error);
+                showNotification("Ocurrió un error inesperado durante el cotejo.", "error");
+            } finally {
+                setIsMatchmaking(false);
+            }
+        }, 50);
+    };
+
+    const handleGenerateIndividualFights = () => {
+        if (!matchmakingResults) return;
+
+        const { fights, leftovers } = findMaximumPairsGreedy(matchmakingResults.unpairedRoosters, torneo);
+        
+        const newIndividualFights = fights.map((f, i) => ({...f, fightNumber: matchmakingResults.mainFights.length + matchmakingResults.individualFights.length + i + 1, isRoundFight: false }));
+
+        setMatchmakingResults(prev => {
+            if (!prev) return null;
+            return {
+                ...prev,
+                individualFights: [...prev.individualFights, ...newIndividualFights],
+                unpairedRoosters: leftovers,
+            };
+        });
+    };
+
   const handleFinishFight = (fightId: string, winner: 'A' | 'B' | 'DRAW', duration: number) => {
       setMatchmakingResults(prev => {
         if (!prev) return null;
@@ -1528,95 +1525,105 @@ const setupListeners = (userId: string) => {
   const handleReset = () => {
     setCurrentScreen(Screen.SETUP);
     setMatchmakingResults(null);
+    setTournamentPhase('main');
   };
 
- const renderScreen = () => {
+  const renderScreen = () => {
     switch(currentScreen) {
-      
-      case Screen.MATCHMAKING: { // Añadimos { para empezar el bloque
-        // Si hay resultados, muestra la pantalla de matchmaking, si no, null.
-        return matchmakingResults ? (
-            <MatchmakingScreen 
-                results={matchmakingResults}
-                torneo={torneo}
-                partidosCuerdas={partidosCuerdas}
-                onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
-                onBack={() => {
-                  setMatchmakingResults(null);
-                  setCurrentScreen(Screen.SETUP);
-                }}
-            />
-        ) : null;
-      } // Añadimos } para cerrar el bloque
-
-      case Screen.LIVE_FIGHT: { // Abrimos bloque
-        const allFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
-            .sort((a,b) => a.fightNumber - b.fightNumber);
+      case Screen.MATCHMAKING:
+        return matchmakingResults ? <MatchmakingScreen 
+                    results={matchmakingResults}
+                    torneo={torneo}
+                    partidosCuerdas={partidosCuerdas}
+                    onStartTournament={() => {
+                        setTournamentPhase('main');
+                        setCurrentScreen(Screen.LIVE_FIGHT)
+                    }}
+                    onBack={() => {
+                      setMatchmakingResults(null);
+                      setCurrentScreen(Screen.SETUP);
+                    }}
+                    onGenerateIndividualFights={handleGenerateIndividualFights}
+               /> : null;
+      case Screen.LIVE_FIGHT: {
+        const mainFights = matchmakingResults?.mainFights || [];
+        const individualFights = matchmakingResults?.individualFights || [];
         
-        return (
-            <LiveFightScreen 
-                peleas={allFights.filter(p => p.winner === null)} 
-                torneo={torneo}
-                partidosCuerdas={partidosCuerdas}
-                onFinishFight={handleFinishFight}
-                onFinishTournament={() => setCurrentScreen(Screen.RESULTS)}
-           />
-        );
-      } // Cerramos bloque
+        const pendingMainFights = mainFights.filter(p => p.winner === null);
+        const pendingIndividualFights = individualFights.filter(p => p.winner === null);
 
-      case Screen.RESULTS: { // Abrimos bloque
-        const allFinishedFights = [...(matchmakingResults?.mainFights || []), ...(matchmakingResults?.individualFights || [])]
-            .sort((a,b) => a.fightNumber - b.fightNumber);
+        let fightsForThisPhase: Pelea[] = [];
+        if (tournamentPhase === 'main') {
+            fightsForThisPhase = pendingMainFights;
+        } else if (tournamentPhase === 'individual') {
+            fightsForThisPhase = pendingIndividualFights;
+        }
+        
+        const onTournamentPhaseFinished = () => {
+            if (tournamentPhase === 'main') {
+                setTournamentPhase('individual');
+                setCurrentScreen(Screen.RESULTS);
+            } else if (tournamentPhase === 'individual') {
+                setTournamentPhase('finished');
+                setCurrentScreen(Screen.RESULTS);
+            }
+        };
 
-        return (
-            <ResultsScreen 
-                peleas={allFinishedFights} 
-                torneo={torneo} 
-                partidosCuerdas={partidosCuerdas} 
-                onReset={handleReset} 
-            />
-        );
-      } // Cerramos bloque
+        return <LiveFightScreen 
+                    peleas={fightsForThisPhase} 
+                    torneo={torneo}
+                    partidosCuerdas={partidosCuerdas}
+                    onFinishFight={handleFinishFight}
+                    onFinishTournament={onTournamentPhaseFinished}
+               />;
+      }
+      case Screen.RESULTS: {
+         if (tournamentPhase === 'main') {
+            // This state is not logically possible, but as a safeguard for TypeScript
+            return null;
+         }
 
-      case Screen.ADMIN_DASHBOARD: { // Abrimos bloque
-        return (
-            <AdminDashboard 
-                users={allUsers} 
-                onAddUser={handleAdminAddUser} 
-                showNotification={showNotification} 
-                onBackToApp={() => setCurrentScreen(Screen.SETUP)} 
-            />
-        );
-      } // Cerramos bloque
+         const mainFights = matchmakingResults?.mainFights || [];
+         const individualFights = matchmakingResults?.individualFights || [];
 
-      case Screen.LOGIN: { // Abrimos bloque
-         return (
-            <LoginScreen 
-                onLogin={handleLogin} 
-                onRegister={handleRegister} 
-                showNotification={showNotification}
-            />
-         );
-      } // Cerramos bloque
-      
-      case Screen.SETUP: // Caso por defecto
-      default: { // Abrimos bloque
-        return (
-            <SetupScreen 
-                partidosCuerdas={partidosCuerdas}
-                gallos={gallos}
-                torneo={torneo}
-                onUpdateTorneo={handleUpdateTorneo}
-                onStartMatchmaking={handleStartMatchmaking}
-                showNotification={showNotification}
-                onSavePartido={handleSavePartido}
-                onDeletePartido={handleDeletePartido}
-                onSaveGallo={handleSaveGallo}
-                onDeleteGallo={handleDeleteGallo}
-                isMatchmaking={isMatchmaking}
-            />
-        );
-      } // Cerramos bloque
+         let fightsToShow: Pelea[] = [];
+         if (tournamentPhase === 'individual') {
+             fightsToShow = mainFights;
+         } else {
+             fightsToShow = [...mainFights, ...individualFights].sort((a,b) => a.fightNumber - b.fightNumber);
+         }
+         
+         const hasIndividualFights = individualFights.length > 0;
+
+        return <ResultsScreen 
+                    peleas={fightsToShow} 
+                    torneo={torneo} 
+                    partidosCuerdas={partidosCuerdas} 
+                    onReset={handleReset} 
+                    tournamentPhase={tournamentPhase}
+                    onStartIndividualFights={() => setCurrentScreen(Screen.LIVE_FIGHT)}
+                    hasIndividualFights={hasIndividualFights}
+                />;
+      }
+      case Screen.ADMIN_DASHBOARD:
+        return <AdminDashboard users={allUsers} onAddUser={handleAdminAddUser} showNotification={showNotification} onBackToApp={() => setCurrentScreen(Screen.SETUP)} />;
+      case Screen.LOGIN:
+         return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} showNotification={showNotification}/>;
+      case Screen.SETUP:
+      default:
+        return <SetupScreen 
+                    partidosCuerdas={partidosCuerdas}
+                    gallos={gallos}
+                    torneo={torneo}
+                    onUpdateTorneo={handleUpdateTorneo}
+                    onStartMatchmaking={handleStartMatchmaking}
+                    showNotification={showNotification}
+                    onSavePartido={handleSavePartido}
+                    onDeletePartido={handleDeletePartido}
+                    onSaveGallo={handleSaveGallo}
+                    onDeleteGallo={handleDeleteGallo}
+                    isMatchmaking={isMatchmaking}
+                />;
     }
   }
 
