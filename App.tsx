@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Screen, PartidoCuerda, Gallo, Pelea, Torneo, PesoUnit, PartidoStats, User, Notification } from './types';
 import { TrophyIcon, RoosterIcon, UsersIcon, SettingsIcon, PlayIcon, PauseIcon, RepeatIcon, CheckIcon, XIcon, PlusIcon, TrashIcon, PencilIcon, EyeIcon, EyeOffIcon } from './components/Icons';
@@ -5,14 +6,14 @@ import Modal from './components/Modal';
 import Toaster from './components/Toaster';
 
 import { auth, db, firebaseConfig } from './firebase';
-import { initializeApp } from 'firebase/app';
+import { initializeApp } from '@firebase/app';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     onAuthStateChanged,
     signOut,
     getAuth,
-} from "firebase/auth";
+} from "@firebase/auth";
 import {
     doc,
     setDoc,
@@ -26,7 +27,7 @@ import {
     deleteDoc,
     getDocs,
     updateDoc
-} from "firebase/firestore";
+} from "@firebase/firestore";
 import { DEMO_GALLERAS } from './constants';
 
 
@@ -1099,27 +1100,50 @@ const LoginScreen: React.FC<{
 
 const AdminDashboard: React.FC<{
     users: User[];
+    currentUser: User | null;
     onAddUser: (name: string, phone: string, email: string, pass: string, role: 'user' | 'demo') => Promise<void>;
+    onUpdateUser: (userId: string, data: { name: string; phone: string; role: User['role'] }) => void;
+    onDeleteUser: (userId: string) => void;
     showNotification: (message: string, type: Notification['type']) => void;
     onBackToApp: () => void;
-}> = ({ users, onAddUser, showNotification, onBackToApp }) => {
+}> = ({ users, currentUser, onAddUser, onUpdateUser, onDeleteUser, showNotification, onBackToApp }) => {
+    // Add user state
     const [isAddUserModalOpen, setAddUserModalOpen] = useState(false);
-    const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'user' | 'demo'>('user');
+    const [addUserForm, setAddUserForm] = useState({ name: '', phone: '', email: '', password: '', role: 'user' as 'user' | 'demo' });
+
+    // Edit user state
+    const [isEditUserModalOpen, setEditUserModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [editUserForm, setEditUserForm] = useState({ name: '', phone: '', role: 'user' as User['role'] });
 
     const handleAddUserSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await onAddUser(name, phone, email, password, role);
-            showNotification(`Usuario ${role} creado con éxito.`, 'success');
+            await onAddUser(addUserForm.name, addUserForm.phone, addUserForm.email, addUserForm.password, addUserForm.role);
+            showNotification(`Usuario ${addUserForm.role} creado con éxito.`, 'success');
             setAddUserModalOpen(false);
-            setName(''); setPhone(''); setEmail(''); setPassword(''); setRole('user');
+            setAddUserForm({ name: '', phone: '', email: '', password: '', role: 'user' });
         } catch (error) {
-            showNotification('Error al crear usuario.', 'error');
+            // Error notification is handled in the parent onAddUser function
         }
+    };
+
+    const handleOpenEditModal = (user: User) => {
+        setEditingUser(user);
+        setEditUserForm({ name: user.name, phone: user.phone, role: user.role });
+        setEditUserModalOpen(true);
+    };
+
+    const handleCloseEditModal = () => {
+        setEditUserModalOpen(false);
+        setEditingUser(null);
+    };
+
+    const handleEditUserSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUser) return;
+        onUpdateUser(editingUser.id, editUserForm);
+        handleCloseEditModal();
     };
 
     return (
@@ -1146,6 +1170,7 @@ const AdminDashboard: React.FC<{
                                 <th scope="col" className="px-4 py-3">Email</th>
                                 <th scope="col" className="px-4 py-3">Teléfono</th>
                                 <th scope="col" className="px-4 py-3">Rol</th>
+                                <th scope="col" className="px-4 py-3 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1155,9 +1180,28 @@ const AdminDashboard: React.FC<{
                                     <td className="px-4 py-3">{user.email}</td>
                                     <td className="px-4 py-3">{user.phone}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
+                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                            user.role === 'admin' ? 'bg-red-500 text-white' : 
+                                            user.role === 'demo' ? 'bg-green-500 text-white' : 
+                                            'bg-blue-500 text-white'
+                                        }`}>
                                             {user.role}
                                         </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                        <div className="flex items-center justify-end space-x-2">
+                                            <button onClick={() => handleOpenEditModal(user)} className="text-gray-400 hover:text-amber-400 p-1 transition-colors">
+                                                <PencilIcon className="w-5 h-5" />
+                                            </button>
+                                            <button 
+                                              onClick={() => onDeleteUser(user.id)} 
+                                              className="text-gray-400 hover:text-red-500 p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              disabled={user.id === currentUser?.id}
+                                              title={user.id === currentUser?.id ? "No se puede eliminar a sí mismo" : "Eliminar usuario"}
+                                            >
+                                                <TrashIcon className="w-5 h-5" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -1168,13 +1212,13 @@ const AdminDashboard: React.FC<{
             
             <Modal isOpen={isAddUserModalOpen} onClose={() => setAddUserModalOpen(false)} title="Añadir Nuevo Usuario">
                 <form onSubmit={handleAddUserSubmit} className="space-y-4">
-                    <InputField label="Nombre" value={name} onChange={e => setName(e.target.value)} required />
-                    <InputField label="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} required />
-                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <InputField label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                    <InputField label="Nombre" value={addUserForm.name} onChange={e => setAddUserForm(s => ({...s, name: e.target.value}))} required />
+                    <InputField label="Teléfono" value={addUserForm.phone} onChange={e => setAddUserForm(s => ({...s, phone: e.target.value}))} required />
+                    <InputField label="Email" type="email" value={addUserForm.email} onChange={e => setAddUserForm(s => ({...s, email: e.target.value}))} required />
+                    <InputField label="Contraseña" type="password" value={addUserForm.password} onChange={e => setAddUserForm(s => ({...s, password: e.target.value}))} required />
                     <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
-                        <select value={role} onChange={e => setRole(e.target.value as 'user' | 'demo')} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
+                        <select value={addUserForm.role} onChange={e => setAddUserForm(s => ({...s, role: e.target.value as 'user' | 'demo'}))} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
                             <option value="user">Usuario</option>
                             <option value="demo">Demo</option>
                         </select>
@@ -1182,6 +1226,32 @@ const AdminDashboard: React.FC<{
                      <div className="flex justify-end pt-4 space-x-2">
                         <button type="button" onClick={() => setAddUserModalOpen(false)} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button>
                         <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Crear Usuario</button>
+                    </div>
+                </form>
+            </Modal>
+
+            <Modal isOpen={isEditUserModalOpen} onClose={handleCloseEditModal} title="Editar Usuario">
+                <form onSubmit={handleEditUserSubmit} className="space-y-4">
+                     <InputField label="Email (no editable)" value={editingUser?.email || ''} disabled />
+                     <InputField label="Nombre" value={editUserForm.name} onChange={e => setEditUserForm(s => ({...s, name: e.target.value}))} required />
+                     <InputField label="Teléfono" value={editUserForm.phone} onChange={e => setEditUserForm(s => ({...s, phone: e.target.value}))} required />
+                    <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
+                        <select 
+                            value={editUserForm.role} 
+                            onChange={e => setEditUserForm(s => ({...s, role: e.target.value as User['role']}))}
+                            className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 disabled:bg-gray-600"
+                            disabled={editingUser?.id === currentUser?.id}
+                        >
+                            <option value="user">Usuario</option>
+                            <option value="demo">Demo</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                         {editingUser?.id === currentUser?.id && <p className="text-xs text-gray-500 mt-1">No puedes cambiar tu propio rol.</p>}
+                    </div>
+                     <div className="flex justify-end pt-4 space-x-2">
+                        <button type="button" onClick={handleCloseEditModal} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                        <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Guardar Cambios</button>
                     </div>
                 </form>
             </Modal>
@@ -1383,6 +1453,56 @@ const App: React.FC = () => {
         await signOut(tempAuth); // Sign out the temporary user
     }
   };
+
+  const handleUpdateUser = async (userId: string, data: { name: string; phone: string; role: User['role'] }) => {
+    if (userId === currentUser?.id && data.role !== 'admin') {
+        showNotification("No puedes quitarte el rol de administrador a ti mismo.", "error");
+        return;
+    }
+    try {
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, data);
+        showNotification('Usuario actualizado correctamente.', 'success');
+    } catch (error) {
+        console.error("Error updating user:", error);
+        showNotification('Error al actualizar el usuario.', 'error');
+    }
+  };
+
+  const handleDeleteUser = async (userIdToDelete: string) => {
+    if (userIdToDelete === currentUser?.id) {
+        showNotification("No puedes eliminar tu propia cuenta de administrador.", 'error');
+        return;
+    }
+    if (!window.confirm("¿Estás seguro de que quieres eliminar este usuario y TODOS sus datos asociados (partidos, gallos, torneos)? Esta acción es irreversible.")) return;
+
+    try {
+        const batch = writeBatch(db);
+
+        // Delete Firestore documents
+        const userDocRef = doc(db, "users", userIdToDelete);
+        batch.delete(userDocRef);
+
+        const torneoDocRef = doc(db, "torneos", userIdToDelete);
+        batch.delete(torneoDocRef);
+
+        const partidosQuery = query(collection(db, "partidosCuerdas"), where("userId", "==", userIdToDelete));
+        const partidosSnapshot = await getDocs(partidosQuery);
+        partidosSnapshot.forEach(doc => batch.delete(doc.ref));
+
+        const gallosQuery = query(collection(db, "gallos"), where("userId", "==", userIdToDelete));
+        const gallosSnapshot = await getDocs(gallosQuery);
+        gallosSnapshot.forEach(doc => batch.delete(doc.ref));
+        
+        await batch.commit();
+        showNotification("Los datos del usuario han sido eliminados.", 'success');
+
+    } catch (error) {
+        console.error("Error deleting user data:", error);
+        showNotification("Ocurrió un error al eliminar los datos del usuario.", 'error');
+    }
+  };
+
 
   // --- DATA HANDLERS ---
   const handleSavePartido = async (partidoData: Omit<PartidoCuerda, 'id' | 'userId'>, currentPartidoId: string | null) => {
@@ -1663,7 +1783,15 @@ const App: React.FC = () => {
                 />;
       }
       case Screen.ADMIN_DASHBOARD:
-        return <AdminDashboard users={allUsers} onAddUser={handleAdminAddUser} showNotification={showNotification} onBackToApp={() => setCurrentScreen(Screen.SETUP)} />;
+        return <AdminDashboard 
+                    users={allUsers} 
+                    currentUser={currentUser}
+                    onAddUser={handleAdminAddUser} 
+                    onUpdateUser={handleUpdateUser}
+                    onDeleteUser={handleDeleteUser}
+                    showNotification={showNotification} 
+                    onBackToApp={() => setCurrentScreen(Screen.SETUP)} 
+                />;
       case Screen.SETUP:
       default:
         return <SetupScreen 
