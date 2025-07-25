@@ -72,81 +72,6 @@ const formatWeight = (gallo: Gallo, globalUnit: PesoUnit): string => {
 };
 
 
-// A robust function to find a perfect matching using backtracking.
-const findPerfectMatching = (
-    roosters: Gallo[], 
-    torneo: Torneo,
-    options: { shuffle?: boolean } = {}
-): Pelea[] | null => {
-    const memo = new Map<string, Pelea[] | null>();
-
-    const solve = (availableRoosters: Gallo[]): Pelea[] | null => {
-        if (availableRoosters.length === 0) {
-            return [];
-        }
-
-        const sortedIds = availableRoosters.map(r => r.id).sort().join(',');
-        if (memo.has(sortedIds)) {
-            return memo.get(sortedIds)!;
-        }
-
-        const roosterToPair = availableRoosters[0];
-        const otherRoosters = availableRoosters.slice(1);
-
-        const potentialPartners: { partner: Gallo; weightDiff: number }[] = [];
-        otherRoosters.forEach(partner => {
-            if (roosterToPair.partidoCuerdaId === partner.partidoCuerdaId) return;
-
-            const areExceptions = torneo.exceptions.some(pair =>
-                (pair.includes(roosterToPair.partidoCuerdaId) && pair.includes(partner.partidoCuerdaId))
-            );
-            if (areExceptions) return;
-
-            const weightA = convertToGrams(roosterToPair.weight, roosterToPair.weightUnit);
-            const weightB = convertToGrams(partner.weight, partner.weightUnit);
-            const weightDiff = Math.abs(weightA - weightB);
-            const ageDiff = Math.abs((roosterToPair.ageMonths || 1) - (partner.ageMonths || 1));
-
-            if (weightDiff <= torneo.weightTolerance && ageDiff <= (torneo.ageToleranceMonths || 0)) {
-                potentialPartners.push({ partner, weightDiff });
-            }
-        });
-
-        if (options.shuffle) {
-            for (let i = potentialPartners.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [potentialPartners[i], potentialPartners[j]] = [potentialPartners[j], potentialPartners[i]];
-            }
-        } else {
-            potentialPartners.sort((a, b) => a.weightDiff - b.weightDiff);
-        }
-
-        for (const { partner } of potentialPartners) {
-            const remainingRoosters = otherRoosters.filter(r => r.id !== partner.id);
-            const subSolution = solve(remainingRoosters);
-
-            if (subSolution !== null) {
-                const newFight: Pelea = {
-                    id: `fight-${Date.now()}-${Math.random()}`,
-                    fightNumber: 0, 
-                    roosterA: roosterToPair,
-                    roosterB: partner,
-                    winner: null,
-                    duration: null,
-                };
-                const result = [newFight, ...subSolution];
-                memo.set(sortedIds, result);
-                return result;
-            }
-        }
-
-        memo.set(sortedIds, null);
-        return null;
-    };
-    
-    return solve([...roosters]);
-};
-
 const findMaximumPairsGreedy = (
     roostersToMatch: Gallo[],
     torneo: Torneo
@@ -201,28 +126,6 @@ const findMaximumPairsGreedy = (
 
     const leftovers = availableRoosters.filter(r => !pairedIds.has(r.id));
     return { fights, leftovers };
-};
-
-const createFightPlan = (
-    roostersToMatch: Gallo[], 
-    torneo: Torneo, 
-    options: { shuffle?: boolean } = {}
-): { fights: Pelea[], leftovers: Gallo[] } => {
-    
-    let roostersForMatching = [...roostersToMatch];
-    const leftovers: Gallo[] = [];
-    if (roostersForMatching.length % 2 !== 0) {
-        leftovers.push(roostersForMatching.pop()!);
-    }
-
-    const fightSolution = findPerfectMatching(roostersForMatching, torneo, options);
-
-    if (fightSolution) {
-        return { fights: fightSolution, leftovers: leftovers };
-    } else {
-        console.warn("Could not find a perfect matching for the given roosters and rules.");
-        return { fights: [], leftovers: roostersToMatch };
-    }
 };
 
 
@@ -499,7 +402,8 @@ const SetupScreen: React.FC<{
     onDeletePartido: (partidoId: string) => void;
     onSaveGallo: (galloData: Omit<Gallo, 'id' | 'userId'>, currentGalloId: string | null) => void;
     onDeleteGallo: (galloId: string) => void;
-}> = ({ partidosCuerdas, gallos, torneo, onUpdateTorneo, onStartMatchmaking, showNotification, onSavePartido, onDeletePartido, onSaveGallo, onDeleteGallo }) => {
+    isMatchmaking: boolean;
+}> = ({ partidosCuerdas, gallos, torneo, onUpdateTorneo, onStartMatchmaking, showNotification, onSavePartido, onDeletePartido, onSaveGallo, onDeleteGallo, isMatchmaking }) => {
     const [isPartidoModalOpen, setPartidoModalOpen] = useState(false);
     const [isGalloModalOpen, setGalloModalOpen] = useState(false);
     
@@ -616,19 +520,22 @@ const SetupScreen: React.FC<{
                         showNotification={showNotification}
                     />
                 </SectionCard>
-
-                <SectionCard icon={<UsersIcon/>} title="Partido, Gallera o Cuerda" buttonText="Añadir Partido" onButtonClick={() => {setCurrentPartido(null); setPartidoModalOpen(true)}}>
-                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                <SectionCard icon={<UsersIcon/>} title="Partidos / Cuerdas" buttonText="Añadir Partido" onButtonClick={() => {setCurrentPartido(null); setPartidoModalOpen(true)}}>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                         {partidosCuerdas.length === 0 && <p className="text-gray-400 text-center py-4">No hay partidos registrados.</p>}
                         {partidosCuerdas.map(p => (
                             <div key={p.id} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
                                 <div>
                                     <p className="font-semibold text-white">{p.name}</p>
-                                    <p className="text-xs text-gray-400">{p.owner}</p>
+                                    <p className="text-sm text-gray-400">{p.owner}</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <button onClick={() => { setCurrentPartido(p); setPartidoModalOpen(true); }} className="text-gray-400 hover:text-amber-400 transition-colors p-1"><PencilIcon className="w-5 h-5"/></button>
-                                    <button onClick={() => onDeletePartido(p.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><TrashIcon className="w-5 h-5"/></button>
+                                    <button onClick={() => { setCurrentPartido(p); setPartidoModalOpen(true); }} className="text-gray-400 hover:text-amber-400 transition-colors p-1">
+                                        <PencilIcon className="w-5 h-5"/>
+                                    </button>
+                                    <button onClick={() => onDeletePartido(p.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
+                                        <TrashIcon className="w-5 h-5"/>
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -636,1172 +543,988 @@ const SetupScreen: React.FC<{
                 </SectionCard>
             </div>
 
-            <div className="mt-12 text-center">
-                <button 
-                    onClick={onStartMatchmaking} 
-                    disabled={activeRoostersCount < 2}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 sm:py-4 sm:px-10 rounded-lg transition-all text-lg sm:text-xl shadow-lg disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105"
+            <div className="mt-8 text-center">
+                <button
+                    onClick={onStartMatchmaking}
+                    disabled={activeRoostersCount < 2 || isMatchmaking}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center w-full sm:w-auto mx-auto"
                 >
-                    <span className="flex items-center justify-center space-x-3">
-                        <PlayIcon className="w-6 h-6"/>
-                        <span>Iniciar Cotejo ({activeRoostersCount} Gallos)</span>
-                    </span>
+                    {isMatchmaking ? (
+                        <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Cotejando...</span>
+                        </>
+                    ) : (
+                        <>
+                            <PlayIcon className="w-6 h-6 mr-2" />
+                            <span>Iniciar Cotejo ({activeRoostersCount} Gallos)</span>
+                        </>
+                    )}
                 </button>
             </div>
-
-            <PartidoFormModal 
-                isOpen={isPartidoModalOpen}
-                onClose={() => setPartidoModalOpen(false)}
-                onSave={handleSavePartidoClick}
-                partido={currentPartido}
-            />
-
-            <GalloFormModal
-                isOpen={isGalloModalOpen}
-                onClose={() => setGalloModalOpen(false)}
-                onSave={handleSaveGalloClick}
-                gallo={currentGallo}
-                partidos={partidosCuerdas}
-                globalWeightUnit={torneo.weightUnit}
-                showNotification={showNotification}
-            />
+            
+            <PartidoFormModal isOpen={isPartidoModalOpen} onClose={() => setPartidoModalOpen(false)} onSave={handleSavePartidoClick} partido={currentPartido} />
+            <GalloFormModal isOpen={isGalloModalOpen} onClose={() => setGalloModalOpen(false)} onSave={handleSaveGalloClick} gallo={currentGallo} partidos={partidosCuerdas} globalWeightUnit={torneo.weightUnit} showNotification={showNotification} />
         </div>
     );
 };
-const MatchmakingScreen: React.FC<{ torneo: Torneo; partidosCuerdas: PartidoCuerda[]; onStartTournament: () => void; onBackToSetup: () => void; peleas: Pelea[]; peleasIndividuales: Pelea[]; unpairedRoosters: Gallo[]; matchmakingNote: string; tournamentMetrics: { contribution: number; fights: number; participants: number; } | null; onShuffleFights: () => void; onGenerateIndividualFights: () => void; individualMatchFailureReason: string | null; }> = ({ torneo, partidosCuerdas, onStartTournament, onBackToSetup, peleas, peleasIndividuales, unpairedRoosters, matchmakingNote, tournamentMetrics, onShuffleFights, onGenerateIndividualFights, individualMatchFailureReason }) => {
-    const getPartido = (id: string) => partidosCuerdas.find(p => p.id === id);
 
-    const renderPelea = (pelea: Pelea) => (
-        <div key={pelea.id} className="bg-gray-800/60 rounded-xl p-4 border border-gray-700 flex flex-col items-center shadow-lg">
-            <div className="w-full flex justify-between items-center mb-3">
-                <span className="text-xs font-bold text-amber-400 bg-gray-900/50 px-2 py-1 rounded">
-                    PELEA #{pelea.fightNumber}
-                </span>
+const MatchmakingScreen: React.FC<{ 
+    peleas: Pelea[]; 
+    unpairedRoosters: Gallo[];
+    torneo: Torneo;
+    partidosCuerdas: PartidoCuerda[];
+    onStartTournament: () => void;
+    onBack: () => void;
+    onGenerateIndividualFights: (roosters: Gallo[]) => Pelea[];
+}> = ({ peleas, unpairedRoosters, torneo, partidosCuerdas, onStartTournament, onBack, onGenerateIndividualFights }) => {
+    
+    const [individualFights, setIndividualFights] = useState<Pelea[]>([]);
+
+    const handleGenerateIndividual = () => {
+        const newFights = onGenerateIndividualFights(unpairedRoosters);
+        setIndividualFights(newFights);
+    };
+    
+    const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
+
+    const initialContribution = useMemo(() => {
+        if (!torneo.rondas.enabled || partidosCuerdas.length < 2) return 0;
+        const partidosConGallos = partidosCuerdas.filter(p => unpairedRoosters.some(g => g.partidoCuerdaId !== p.id));
+        if (partidosConGallos.length < 2) return 0;
+        try {
+            return Math.min(...partidosConGallos.map(p => {
+                const count = unpairedRoosters.filter(g => g.partidoCuerdaId === p.id).length;
+                return count > 0 ? count : Infinity;
+            }).filter(c => c !== Infinity));
+        } catch (e) {
+            return 0;
+        }
+    }, [unpairedRoosters, partidosCuerdas, torneo.rondas.enabled]);
+
+    const numRondas = initialContribution;
+    
+    const stats = {
+        aporte: initialContribution,
+        rondas: numRondas,
+        peleasEnTorneo: peleas.length,
+        gallosEnTorneo: peleas.length * 2,
+        gallosSinPareja: unpairedRoosters.length,
+    };
+    
+    const renderPelea = (pelea: Pelea, index: number) => (
+        <div key={pelea.id} className="bg-gray-700/50 rounded-lg p-3 flex items-center justify-between text-sm">
+            <div className="w-1/12 text-center text-gray-400 font-bold">{index + 1}</div>
+            <div className="w-5/12 text-right pr-2">
+                <p className="font-bold text-white">{pelea.roosterA.name}</p>
+                <p className="text-xs text-gray-400">{getPartidoName(pelea.roosterA.partidoCuerdaId)}</p>
+                <p className="text-xs font-mono">{formatWeight(pelea.roosterA, torneo.weightUnit)} / {pelea.roosterA.ageMonths || 'N/A'}m</p>
             </div>
-            <div className="w-full grid grid-cols-11 items-center gap-2">
-                <div className="col-span-5 text-right">
-                    <p className="font-bold text-white truncate text-sm sm:text-base">{pelea.roosterA.name}</p>
-                    <p className="text-xs sm:text-sm text-gray-400 truncate">{getPartido(pelea.roosterA.partidoCuerdaId)?.name}</p>
-                </div>
-                <div className="col-span-1 text-center font-extrabold text-red-500 text-xl sm:text-2xl">
-                    VS
-                </div>
-                <div className="col-span-5 text-left">
-                    <p className="font-bold text-white truncate text-sm sm:text-base">{pelea.roosterB.name}</p>
-                    <p className="text-xs sm:text-sm text-gray-400 truncate">{getPartido(pelea.roosterB.partidoCuerdaId)?.name}</p>
-                </div>
-            </div>
-            <div className="w-full text-center text-xs text-gray-500 mt-2 font-mono space-x-2">
-                <span>{pelea.roosterA.ageMonths}m vs {pelea.roosterB.ageMonths}m</span>
-                <span className="text-gray-600">|</span>
-                <span>{formatWeight(pelea.roosterA, torneo.weightUnit)} vs {formatWeight(pelea.roosterB, torneo.weightUnit)}</span>
+            <div className="w-1/12 text-center text-red-500 font-extrabold">VS</div>
+            <div className="w-5/12 text-left pl-2">
+                <p className="font-bold text-white">{pelea.roosterB.name}</p>
+                <p className="text-xs text-gray-400">{getPartidoName(pelea.roosterB.partidoCuerdaId)}</p>
+                <p className="text-xs font-mono">{formatWeight(pelea.roosterB, torneo.weightUnit)} / {pelea.roosterB.ageMonths || 'N/A'}m</p>
             </div>
         </div>
     );
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             <div className="text-center">
-                <h2 className="text-2xl sm:text-3xl font-bold text-white">Cotejador de Peleas</h2>
+                <h2 className="text-3xl font-bold text-white">Cartelera de Peleas</h2>
+                <p className="text-gray-400 mt-2">Este es el resultado del cotejo. Revisa las peleas y comienza el torneo.</p>
             </div>
             
-            <div className="flex flex-col md:flex-row justify-center gap-4">
-                 <button onClick={onBackToSetup} className="w-full md:w-auto bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all">
-                     Volver a Configuración
-                 </button>
-                  <button onClick={onShuffleFights} disabled={peleas.length === 0} className="w-full md:w-auto flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed">
-                    <RepeatIcon className="w-5 h-5" />
-                    <span>Barajar</span>
-                 </button>
-                 <button onClick={onStartTournament} disabled={peleas.length === 0} className="w-full md:w-auto flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed">
-                    <PlayIcon className="w-5 h-5" />
-                    <span>Iniciar Torneo</span>
-                 </button>
+            <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4">
+                <h3 className="text-xl font-bold text-amber-400 mb-3">Estadísticas del Cotejo</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
+                    {torneo.rondas.enabled && (
+                        <>
+                           <div className="bg-gray-700/50 p-3 rounded-lg">
+                               <p className="text-2xl font-bold text-white">{stats.aporte}</p>
+                               <p className="text-sm text-gray-400">Aporte por Equipo</p>
+                           </div>
+                           <div className="bg-gray-700/50 p-3 rounded-lg">
+                               <p className="text-2xl font-bold text-white">{stats.rondas}</p>
+                               <p className="text-sm text-gray-400">Número de Rondas</p>
+                           </div>
+                        </>
+                    )}
+                    <div className="bg-gray-700/50 p-3 rounded-lg">
+                        <p className="text-2xl font-bold text-white">{stats.peleasEnTorneo}</p>
+                        <p className="text-sm text-gray-400">Peleas para el torneo</p>
+                    </div>
+                    <div className="bg-gray-700/50 p-3 rounded-lg">
+                        <p className="text-2xl font-bold text-white">{stats.gallosEnTorneo}</p>
+                        <p className="text-sm text-gray-400">Gallos en el torneo</p>
+                    </div>
+                    <div className="bg-gray-700/50 p-3 rounded-lg">
+                        <p className="text-2xl font-bold text-white">{stats.gallosSinPareja}</p>
+                        <p className="text-sm text-gray-400">Gallos sin Pareja</p>
+                    </div>
+                </div>
             </div>
-            
-            {(matchmakingNote || tournamentMetrics) && (
-                <div className="text-gray-300 bg-gray-800/50 border border-gray-700 rounded-lg p-4 max-w-2xl mx-auto text-sm">
-                    {matchmakingNote && <p className="text-center text-amber-400 mb-3">{matchmakingNote}</p>}
-                    {tournamentMetrics && (
-                        <div className="text-center space-y-1">
-                           <p><strong>Aporte por Equipo:</strong> {tournamentMetrics.contribution} gallos</p>
-                           <p><strong>Número de Rondas:</strong> {tournamentMetrics.contribution} rondas</p>
-                           <p><strong>Peleas para el torneo rondas:</strong> {tournamentMetrics.fights}</p>
-                           <p><strong>Gallos en el torneo rondas:</strong> {tournamentMetrics.participants}</p>
-                           <p><strong>Gallos sin pareja:</strong> {unpairedRoosters.length}</p>
-                           {peleasIndividuales.length > 0 && (
-                                <p><strong>Peleas Cazadas con gallos individuales:</strong> {peleasIndividuales.length}</p>
-                           )}
+
+            <div className="space-y-4">
+                {peleas.length > 0 ? (
+                    <div className="space-y-2">
+                        {peleas.map(renderPelea)}
+                    </div>
+                ) : (
+                    <p className="text-center text-gray-400 py-6">No se generaron peleas para el torneo principal.</p>
+                )}
+            </div>
+
+             {unpairedRoosters.length > 0 && (
+                <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 mt-8">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold text-amber-400">Peleas Individuales (Sobrantes)</h3>
+                        {individualFights.length === 0 && (
+                             <button onClick={handleGenerateIndividual} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                                Generar Peleas
+                             </button>
+                        )}
+                    </div>
+                    {individualFights.length > 0 ? (
+                        <div className="space-y-2">
+                            {individualFights.map(renderPelea)}
                         </div>
+                    ) : (
+                        <p className="text-gray-500 text-center py-4">Hay {unpairedRoosters.length} gallos esperando cotejo individual.</p>
                     )}
                 </div>
             )}
 
 
-            <div className="space-y-8">
-                {peleas.length > 0 &&
-                    <SectionCard icon={<TrophyIcon/>} title="Peleas del Torneo por Rondas">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
-                            {peleas.map(p => renderPelea(p))}
-                        </div>
-                    </SectionCard>
-                }
-
-                {peleasIndividuales.length > 0 && (
-                    <SectionCard icon={<RoosterIcon/>} title="Peleas Cazadas con gallos individuales">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
-                            {peleasIndividuales.map(p => renderPelea(p))}
-                        </div>
-                    </SectionCard>
-                )}
-
-                {unpairedRoosters.length > 0 && (
-                     <SectionCard icon={<UsersIcon />} title={`Gallos sin Pareja (${unpairedRoosters.length})`}>
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                            {unpairedRoosters.map(g => (
-                                <div key={g.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded-lg">
-                                    <div>
-                                        <p className="font-semibold text-white">{g.name}</p>
-                                        <p className="text-xs text-gray-400">{partidosCuerdas.find(p => p.id === g.partidoCuerdaId)?.name}</p>
-                                    </div>
-                                    <div className="font-mono text-sm space-x-2">
-                                       {g.ageMonths > 0 && <span className="text-white">{g.ageMonths}m</span>}
-                                       <span className="text-gray-400">{formatWeight(g, torneo.weightUnit)}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        {unpairedRoosters.length >= 2 && (
-                             <button 
-                                onClick={onGenerateIndividualFights} 
-                                disabled={!!individualMatchFailureReason}
-                                className={`w-full mt-4 text-gray-900 font-bold py-2 px-4 rounded-lg transition-colors ${
-                                    !!individualMatchFailureReason
-                                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                                        : 'bg-amber-500 hover:bg-amber-600'
-                                }`}
-                             >
-                                {individualMatchFailureReason || 'Cotejar los gallos sin pareja'}
-                            </button>
-                        )}
-                    </SectionCard>
-                )}
+            <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4 pt-4">
+                <button onClick={onBack} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto">Volver a Configuración</button>
+                <button onClick={onStartTournament} disabled={peleas.length === 0} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto disabled:bg-gray-500 disabled:cursor-not-allowed">
+                    Iniciar Torneo en Vivo
+                </button>
             </div>
         </div>
     );
 };
-const LiveFightScreen: React.FC<{ peleas: Pelea[]; partidos: PartidoCuerda[]; currentFightIndex: number; setCurrentFightIndex: (index: number | ((prevIndex: number) => number)) => void; setPeleas: React.Dispatch<React.SetStateAction<Pelea[]>>; onFinishTournament: () => void; torneo: Torneo; fightSetTitle: string; }> = ({ peleas, partidos, currentFightIndex, setCurrentFightIndex, setPeleas, onFinishTournament, torneo, fightSetTitle }) => {
-    const [timer, setTimer] = useState(torneo.fightDuration * 60);
-    const [isTimerRunning, setIsTimerRunning] = useState(false);
-    const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const currentPelea = peleas[currentFightIndex];
-    
-    useEffect(() => {
-        if (isTimerRunning && timer > 0) {
-            intervalRef.current = setInterval(() => {
-                setTimer(prev => prev - 1);
-            }, 1000);
-        } else if (timer <= 0) {
-             setIsTimerRunning(false);
-             if (timer < 0) setTimer(0);
-        }
-        return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-        };
-    }, [isTimerRunning, timer]);
-    
-    useEffect(() => {
-        setTimer(torneo.fightDuration * 60);
-        setIsTimerRunning(false);
-        if (intervalRef.current) clearInterval(intervalRef.current);
-    }, [currentFightIndex, torneo.fightDuration]);
-    
-    if (!currentPelea) {
-        return (
-            <div className="text-center">
-                <h2 className="text-2xl font-bold text-white">No hay peleas en este grupo.</h2>
-                <button onClick={onFinishTournament} className="mt-4 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg">
-                    Ver Resultados
-                </button>
-            </div>
-        );
+const LiveFightScreen: React.FC<{
+  peleas: Pelea[];
+  torneo: Torneo;
+  partidosCuerdas: PartidoCuerda[];
+  onFinishFight: (fightId: string, winner: 'A' | 'B' | 'DRAW', duration: number) => void;
+  onFinishTournament: () => void;
+}> = ({ peleas, torneo, partidosCuerdas, onFinishFight, onFinishTournament }) => {
+  const [currentFightIndex, setCurrentFightIndex] = useState(0);
+  const [timer, setTimer] = useState(torneo.fightDuration * 60);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  const currentFight = peleas[currentFightIndex];
+  const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (isTimerRunning && timer > 0) {
+      interval = setInterval(() => {
+        setTimer(prev => prev - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      setIsTimerRunning(false);
     }
-    
-    const getPartido = (id: string) => partidos.find(p => p.id === id);
-
-    const handleSetWinner = (winner: 'A' | 'B' | 'DRAW') => {
-        setPeleas(prevPeleas => prevPeleas.map(p => 
-            p.id === currentPelea.id 
-            ? { ...p, winner, duration: (torneo.fightDuration * 60) - timer }
-            : p
-        ));
-        
-        if (currentFightIndex < peleas.length - 1) {
-             setCurrentFightIndex(prev => prev + 1);
-        }
+    return () => {
+      if (interval) clearInterval(interval);
     };
+  }, [isTimerRunning, timer]);
 
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    };
+  const handleFinishFight = (winner: 'A' | 'B' | 'DRAW') => {
+    const duration = (torneo.fightDuration * 60) - timer;
+    onFinishFight(currentFight.id, winner, duration);
+    setIsTimerRunning(false);
+    setTimer(torneo.fightDuration * 60);
+    if (currentFightIndex < peleas.length - 1) {
+      setCurrentFightIndex(prev => prev + 1);
+    } else {
+      onFinishTournament();
+    }
+  };
+  
+  const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const secs = (seconds % 60).toString().padStart(2, '0');
+      return `${mins}:${secs}`;
+  }
 
-    const renderRoosterCard = (rooster: Gallo, side: 'A' | 'B') => (
-        <div className={`flex flex-col items-center justify-center p-4 sm:p-8 rounded-2xl w-full ${side === 'A' ? 'bg-red-800/20' : 'bg-blue-800/20'} border ${side === 'A' ? 'border-red-700' : 'border-blue-700'}`}>
-            <h3 className="text-xl sm:text-3xl font-extrabold text-white text-center">{rooster.name}</h3>
-            <p className="text-base sm:text-lg text-gray-300 text-center">{getPartido(rooster.partidoCuerdaId)?.name}</p>
-            <div className="font-mono mt-2 text-amber-400 space-x-2">
-                <span>{rooster.ageMonths}m</span>
-                <span className="text-gray-500">|</span>
-                <span>{formatWeight(rooster, torneo.weightUnit)}</span>
-            </div>
-            {currentPelea.winner === null ? (
-                <button
-                    onClick={() => handleSetWinner(side)}
-                    className={`mt-6 font-bold py-2 px-4 sm:py-3 sm:px-8 rounded-lg transition-transform transform hover:scale-105 ${side === 'A' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}
-                >
-                    Declarar Ganador
-                </button>
-            ) : (currentPelea.winner === side && <div className="mt-6"><TrophyIcon className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400"/></div>)}
-        </div>
-    );
+  if (!currentFight) {
+    return <div>Cargando...</div>
+  }
 
-    return (
-        <div className="space-y-8">
-            <div className="text-center">
-                <p className="text-base sm:text-lg font-semibold text-amber-400">{fightSetTitle}</p>
-                <h2 className="text-2xl sm:text-4xl font-bold text-white">Pelea #{currentPelea.fightNumber} de {peleas.length}</h2>
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-3xl font-bold text-white">Pelea #{currentFight.fightNumber} de {peleas.length}</h2>
+      </div>
+
+      <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            {/* Rooster A */}
+            <div className="text-center md:text-right">
+                 <h3 className="text-2xl font-bold text-white">{currentFight.roosterA.name}</h3>
+                 <p className="text-amber-400">{getPartidoName(currentFight.roosterA.partidoCuerdaId)}</p>
+                 <p className="text-gray-400">{formatWeight(currentFight.roosterA, torneo.weightUnit)} / {currentFight.roosterA.ageMonths}m</p>
             </div>
 
-            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-center">
-                {renderRoosterCard(currentPelea.roosterA, 'A')}
-                {renderRoosterCard(currentPelea.roosterB, 'B')}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-4xl sm:text-5xl font-extrabold text-gray-900/50 -translate-y-4">VS</div>
+            {/* Timer & Controls */}
+            <div className="text-center space-y-4">
+                <p className="text-6xl font-mono font-bold text-white">{formatTime(timer)}</p>
+                <div className="flex justify-center items-center space-x-4">
+                    <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="p-3 bg-gray-700 rounded-full text-white hover:bg-gray-600">
+                        {isTimerRunning ? <PauseIcon className="w-6 h-6"/> : <PlayIcon className="w-6 h-6"/>}
+                    </button>
+                    <button onClick={() => setTimer(torneo.fightDuration * 60)} className="p-3 bg-gray-700 rounded-full text-white hover:bg-gray-600">
+                        <RepeatIcon className="w-6 h-6"/>
+                    </button>
                 </div>
             </div>
-            
-            <div className="flex flex-col items-center justify-center space-y-4 bg-gray-900/50 p-4 sm:p-6 rounded-2xl border border-gray-700">
-                <div className="font-mono text-5xl sm:text-7xl font-bold text-white tracking-wider">{formatTime(timer)}</div>
-                <div className="flex space-x-4">
-                    <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="p-3 bg-gray-700 rounded-full hover:bg-gray-600 transition">
-                        {isTimerRunning ? <PauseIcon className="w-6 h-6 sm:w-8 sm:h-8"/> : <PlayIcon className="w-6 h-6 sm:w-8 sm:h-8"/>}
-                    </button>
-                    <button onClick={() => { setTimer(torneo.fightDuration * 60); setIsTimerRunning(false); }} className="p-3 bg-gray-700 rounded-full hover:bg-gray-600 transition">
-                       <RepeatIcon className="w-6 h-6 sm:w-8 sm:h-8"/>
-                    </button>
-                </div>
-                 {currentPelea.winner === null ? (
-                    <button onClick={() => handleSetWinner('DRAW')} className="mt-4 text-amber-400 hover:text-amber-300 font-semibold py-2 px-6 rounded-lg border border-amber-500 hover:border-amber-400 transition">
-                        Declarar Empate
-                    </button>
-                 ) : (currentPelea.winner === 'DRAW' && <div className="mt-4 text-xl font-bold text-gray-400">EMPATE</div>)}
-            </div>
 
-            <div className="flex justify-between items-center pt-6 border-t border-gray-700">
-                 <button onClick={() => setCurrentFightIndex(currentFightIndex - 1)} disabled={currentFightIndex === 0} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
-                    Anterior
-                </button>
-                <button onClick={onFinishTournament} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-6 rounded-lg transition">
-                    Finalizar
-                </button>
-                <button onClick={() => setCurrentFightIndex(currentFightIndex + 1)} disabled={currentFightIndex >= peleas.length - 1} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
-                    Siguiente
-                </button>
+            {/* Rooster B */}
+            <div className="text-center md:text-left">
+                 <h3 className="text-2xl font-bold text-white">{currentFight.roosterB.name}</h3>
+                 <p className="text-amber-400">{getPartidoName(currentFight.roosterB.partidoCuerdaId)}</p>
+                 <p className="text-gray-400">{formatWeight(currentFight.roosterB, torneo.weightUnit)} / {currentFight.roosterB.ageMonths}m</p>
             </div>
         </div>
-    );
+
+        <div className="mt-8 pt-6 border-t border-gray-700 flex flex-col sm:flex-row justify-center items-center gap-4">
+           <button onClick={() => handleFinishFight('A')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto">Gana {currentFight.roosterA.name}</button>
+           <button onClick={() => handleFinishFight('DRAW')} className="bg-gray-500 hover:bg-gray-400 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-auto">Empate</button>
+           <button onClick={() => handleFinishFight('B')} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto">Gana {currentFight.roosterB.name}</button>
+        </div>
+      </div>
+       <div className="text-center">
+            <button onClick={onFinishTournament} className="text-gray-400 hover:text-white underline">Terminar Torneo Anticipadamente</button>
+        </div>
+    </div>
+  );
 };
-const ResultsScreen: React.FC<{ peleas: Pelea[]; peleasIndividuales: Pelea[]; partidos: PartidoCuerda[]; torneo: Torneo; onNewTournament: () => void; onStartIndividualFights: () => void; }> = ({ peleas, peleasIndividuales, partidos, torneo, onNewTournament, onStartIndividualFights }) => {
+
+const ResultsScreen: React.FC<{ 
+    peleas: Pelea[]; 
+    torneo: Torneo;
+    partidosCuerdas: PartidoCuerda[];
+    onReset: () => void;
+}> = ({ peleas, torneo, partidosCuerdas, onReset }) => {
+    
+    const getPartidoName = (id: string) => partidosCuerdas.find(p => p.id === id)?.name || 'Desconocido';
+    
     const stats: PartidoStats[] = useMemo(() => {
-        const initialStats: Record<string, PartidoStats> = {};
-        partidos.forEach(p => {
-            initialStats[p.id] = {
+        const statsMap: { [key: string]: PartidoStats } = {};
+
+        partidosCuerdas.forEach(p => {
+            statsMap[p.id] = {
                 partidoCuerdaId: p.id,
                 partidoCuerdaName: p.name,
                 wins: 0,
                 draws: 0,
                 losses: 0,
                 points: 0,
-            }
+            };
         });
 
         peleas.forEach(pelea => {
-            if (pelea.winner) {
-                const { roosterA, roosterB, winner } = pelea;
-                const statsA = initialStats[roosterA.partidoCuerdaId];
-                const statsB = initialStats[roosterB.partidoCuerdaId];
+            if (!pelea.winner) return;
 
-                if (winner === 'A') {
-                    if(statsA) { statsA.wins++; statsA.points += torneo.rondas.pointsForWin; }
-                    if(statsB) { statsB.losses++; }
-                } else if (winner === 'B') {
-                    if(statsB) { statsB.wins++; statsB.points += torneo.rondas.pointsForWin; }
-                    if(statsA) { statsA.losses++; }
-                } else if (winner === 'DRAW') {
-                    if(statsA) { statsA.draws++; statsA.points += torneo.rondas.pointsForDraw; }
-                    if(statsB) { statsB.draws++; statsB.points += torneo.rondas.pointsForDraw; }
+            const idA = pelea.roosterA.partidoCuerdaId;
+            const idB = pelea.roosterB.partidoCuerdaId;
+
+            if(pelea.winner === 'A') {
+                if(statsMap[idA]) {
+                    statsMap[idA].wins++;
+                    statsMap[idA].points += torneo.rondas.pointsForWin;
+                }
+                 if(statsMap[idB]) {
+                    statsMap[idB].losses++;
+                }
+            } else if (pelea.winner === 'B') {
+                 if(statsMap[idB]) {
+                    statsMap[idB].wins++;
+                    statsMap[idB].points += torneo.rondas.pointsForWin;
+                }
+                if(statsMap[idA]) {
+                    statsMap[idA].losses++;
+                }
+            } else if (pelea.winner === 'DRAW') {
+                if(statsMap[idA]) {
+                    statsMap[idA].draws++;
+                    statsMap[idA].points += torneo.rondas.pointsForDraw;
+                }
+                 if(statsMap[idB]) {
+                    statsMap[idB].draws++;
+                    statsMap[idB].points += torneo.rondas.pointsForDraw;
                 }
             }
         });
+        
+        return Object.values(statsMap).sort((a, b) => b.points - a.points || b.wins - a.wins);
 
-        return Object.values(initialStats).sort((a, b) => b.points - a.points || b.wins - a.wins);
-
-    }, [peleas, partidos, torneo]);
-    
-    const getPartidoName = (id: string) => partidos.find(p => p.id === id)?.name || 'Desconocido';
-    const formatDuration = (seconds: number | null) => {
-        if (seconds === null) return '-';
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    };
-
-    const hasUnfoughtIndividualFights = peleasIndividuales.length > 0 && peleasIndividuales.some(p => p.winner === null);
-    
-    const renderFightResultRow = (pelea: Pelea) => (
-        <tr key={pelea.id} className="border-b border-gray-700 hover:bg-gray-800/50">
-            <td className="px-4 py-3 text-center">{pelea.fightNumber}</td>
-            <td className={`px-4 py-3 text-right ${pelea.winner === 'A' ? 'font-bold text-white' : ''}`}>
-                {pelea.roosterA.name} <span className="text-gray-400 text-xs hidden sm:inline">({getPartidoName(pelea.roosterA.partidoCuerdaId)})</span>
-            </td>
-            <td className="px-2 py-3 text-center">
-               <span className={`px-2 py-1 text-xs font-bold rounded-full ${
-                    pelea.winner === 'A' ? 'bg-red-500 text-white' : 
-                    pelea.winner === 'B' ? 'bg-blue-500 text-white' : 
-                    pelea.winner === 'DRAW' ? 'bg-amber-500 text-black' : 
-                    'bg-gray-600 text-gray-300'
-                }`}>
-                    {pelea.winner === 'A' ? 'GANA A' : pelea.winner === 'B' ? 'GANA B' : pelea.winner === 'DRAW' ? 'EMPATE' : 'N/A'}
-                </span>
-            </td>
-            <td className={`px-4 py-3 text-left ${pelea.winner === 'B' ? 'font-bold text-white' : ''}`}>
-               <span className="text-gray-400 text-xs hidden sm:inline">({getPartidoName(pelea.roosterB.partidoCuerdaId)})</span> {pelea.roosterB.name}
-            </td>
-            <td className="px-4 py-3 text-center font-mono">{formatDuration(pelea.duration)}</td>
-        </tr>
-    );
+    }, [peleas, partidosCuerdas, torneo]);
 
     return (
         <div className="space-y-8">
             <div className="text-center">
-                <h2 className="text-2xl sm:text-3xl font-bold text-white">Resultados del Torneo</h2>
-                <p className="text-gray-400 mt-2">{torneo.name}</p>
+                <h2 className="text-3xl font-bold text-white">Resultados del Torneo</h2>
+                <p className="text-gray-400 mt-2">{torneo.name} - {torneo.date}</p>
             </div>
-
+            
             {torneo.rondas.enabled && (
-                <SectionCard icon={<TrophyIcon className="w-6 h-6"/>} title="Tabla de Posiciones">
-                   <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-700/50 text-xs text-amber-400 uppercase tracking-wider">
+                <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 sm:p-6">
+                    <h3 className="text-xl font-bold text-amber-400 mb-4">Tabla de Posiciones</h3>
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left text-gray-300">
+                            <thead className="text-xs text-amber-400 uppercase bg-gray-700/50">
                                 <tr>
-                                    <th scope="col" className="px-2 sm:px-6 py-3 rounded-l-lg">Pos.</th>
-                                    <th scope="col" className="px-2 sm:px-6 py-3">Equipo</th>
-                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center">Pts</th>
-                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center">V</th>
-                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center">E</th>
-                                    <th scope="col" className="px-2 sm:px-6 py-3 text-center rounded-r-lg">D</th>
+                                    <th scope="col" className="px-4 py-3">Pos</th>
+                                    <th scope="col" className="px-4 py-3">Equipo</th>
+                                    <th scope="col" className="px-4 py-3 text-center">G</th>
+                                    <th scope="col" className="px-4 py-3 text-center">E</th>
+                                    <th scope="col" className="px-4 py-3 text-center">P</th>
+                                    <th scope="col" className="px-4 py-3 text-center">Puntos</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {stats.map((stat, index) => (
-                                    <tr key={stat.partidoCuerdaId} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                        <td className="px-2 sm:px-6 py-4 font-bold text-lg text-white text-center">{index + 1}</td>
-                                        <td className="px-2 sm:px-6 py-4 font-medium text-white">{stat.partidoCuerdaName}</td>
-                                        <td className="px-2 sm:px-6 py-4 text-center text-lg font-bold text-amber-400">{stat.points}</td>
-                                        <td className="px-2 sm:px-6 py-4 text-center text-green-400">{stat.wins}</td>
-                                        <td className="px-2 sm:px-6 py-4 text-center text-gray-400">{stat.draws}</td>
-                                        <td className="px-2 sm:px-6 py-4 text-center text-red-500">{stat.losses}</td>
-                                    </tr>
-                                ))}
+                               {stats.map((stat, index) => (
+                                   <tr key={stat.partidoCuerdaId} className="border-b border-gray-700 hover:bg-gray-700/30">
+                                       <td className="px-4 py-3 font-bold">{index + 1}</td>
+                                       <td className="px-4 py-3 font-semibold text-white">{stat.partidoCuerdaName}</td>
+                                       <td className="px-4 py-3 text-center text-green-400">{stat.wins}</td>
+                                       <td className="px-4 py-3 text-center text-yellow-400">{stat.draws}</td>
+                                       <td className="px-4 py-3 text-center text-red-400">{stat.losses}</td>
+                                       <td className="px-4 py-3 text-center font-bold text-white">{stat.points}</td>
+                                   </tr>
+                               ))}
                             </tbody>
                         </table>
                     </div>
-                </SectionCard>
+                </div>
             )}
             
-            <SectionCard icon={<RoosterIcon className="w-6 h-6"/>} title="Resultados de Peleas de Torneo">
-                 <div className="overflow-x-auto max-h-96">
-                    <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-gray-900 text-xs text-amber-400 uppercase">
-                            <tr>
-                                <th className="px-4 py-2">#</th>
-                                <th className="px-4 py-2 text-right">Gallo A</th>
-                                <th className="px-2 py-2 text-center">Resultado</th>
-                                <th className="px-4 py-2 text-left">Gallo B</th>
-                                <th className="px-4 py-2 text-center">Tiempo</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-700">
-                            {peleas.map(renderFightResultRow)}
-                        </tbody>
-                    </table>
-                 </div>
-            </SectionCard>
-            
-            {peleasIndividuales.length > 0 && (
-                 <SectionCard icon={<UsersIcon className="w-6 h-6"/>} title="Resultados de Peleas Individuales">
-                    <div className="overflow-x-auto max-h-96">
-                        <table className="w-full text-sm">
-                            <thead className="sticky top-0 bg-gray-900 text-xs text-amber-400 uppercase">
-                                <tr>
-                                    <th className="px-4 py-2">#</th>
-                                    <th className="px-4 py-2 text-right">Gallo A</th>
-                                    <th className="px-2 py-2 text-center">Resultado</th>
-                                    <th className="px-4 py-2 text-left">Gallo B</th>
-                                    <th className="px-4 py-2 text-center">Tiempo</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-700">
-                                {peleasIndividuales.map(renderFightResultRow)}
-                            </tbody>
-                        </table>
-                    </div>
-                    {hasUnfoughtIndividualFights && (
-                         <button onClick={onStartIndividualFights} className="mt-4 w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all">
-                            <PlayIcon className="w-6 h-6" />
-                            <span>Luchar Individuales</span>
-                        </button>
-                    )}
-                 </SectionCard>
-            )}
-            
-            <div className="text-center pt-6">
-                <button onClick={onNewTournament} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all text-lg">
-                    Iniciar Nuevo Torneo
+            <div className="bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700 p-4 sm:p-6">
+                <h3 className="text-xl font-bold text-amber-400 mb-4">Registro de Peleas</h3>
+                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                     {peleas.map(pelea => (
+                         <div key={pelea.id} className="bg-gray-700/50 rounded-lg p-3">
+                             <div className="flex justify-between items-center text-xs text-gray-400 mb-2">
+                                 <span>Pelea #{pelea.fightNumber}</span>
+                                 <span>Duración: {pelea.duration ? `${Math.floor(pelea.duration / 60)}m ${pelea.duration % 60}s` : 'N/A'}</span>
+                             </div>
+                             <div className="flex items-center justify-between text-sm">
+                                <div className={`w-5/12 text-right pr-2 ${pelea.winner === 'A' ? 'font-bold text-green-400' : (pelea.winner === 'B' ? 'text-gray-500' : 'text-white')}`}>
+                                    <span>{pelea.roosterA.name} ({getPartidoName(pelea.roosterA.partidoCuerdaId)})</span>
+                                </div>
+                                <div className="w-2/12 text-center">
+                                    {pelea.winner === 'A' ? <CheckIcon className="w-5 h-5 mx-auto text-green-400"/> : (pelea.winner === 'DRAW' ? <span className="text-yellow-400">E</span> : <XIcon className="w-5 h-5 mx-auto text-red-400"/>)}
+                                </div>
+                                <div className={`w-5/12 text-left pl-2 ${pelea.winner === 'B' ? 'font-bold text-green-400' : (pelea.winner === 'A' ? 'text-gray-500' : 'text-white')}`}>
+                                     <span>{pelea.roosterB.name} ({getPartidoName(pelea.roosterB.partidoCuerdaId)})</span>
+                                </div>
+                             </div>
+                         </div>
+                     ))}
+                </div>
+            </div>
+
+            <div className="text-center mt-8">
+                 <button onClick={onReset} className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-8 rounded-lg text-lg">
+                    Crear Nuevo Torneo
                 </button>
             </div>
         </div>
     );
 };
-
-const AuthContainer: React.FC<{ title: string, children: React.ReactNode}> = ({ title, children }) => (
-    <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-md">
-            <div className="text-center mb-8">
-                 <TrophyIcon className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400 mx-auto" />
-                 <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-wider mt-2">Cotejador de Gallos</h1>
-                 <p className="text-gray-400">{title}</p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6">
-                {children}
-            </div>
-        </div>
-    </div>
-)
-
-const LoginScreen: React.FC<{ onLogin: (email: string, pass: string) => void; }> = ({onLogin}) => {
+const LoginScreen: React.FC<{
+  onLogin: (email: string, pass: string) => Promise<void>;
+  onRegister: (name: string, phone: string, email: string, pass: string) => Promise<void>;
+  showNotification: (message: string, type: Notification['type']) => void;
+}> = ({ onLogin, onRegister, showNotification }) => {
+    const [isLoginView, setIsLoginView] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onLogin(email, password);
-    }
+        setIsLoading(true);
+        try {
+            if (isLoginView) {
+                await onLogin(email, password);
+            } else {
+                await onRegister(name, phone, email, password);
+                showNotification('¡Registro exitoso! Ahora puedes iniciar sesión.', 'success');
+                setIsLoginView(true);
+            }
+        } catch (error: any) {
+            const message = error.code === 'auth/invalid-credential' 
+                ? 'Correo o contraseña incorrectos.'
+                : 'Ocurrió un error. Intenta de nuevo.';
+            showNotification(message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
     
-    return(
-        <AuthContainer title="Inicio de Sesión">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <InputField label="Correo Electrónico" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                <InputField label="Contraseña" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                 <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-3 px-4 rounded-lg transition-colors text-lg">
-                    Entrar
-                </button>
-            </form>
-            <div className="text-center text-sm text-gray-400 pt-2">
-                 <span>Solo para miembros.</span>
-            </div>
-        </AuthContainer>
-    )
-}
+    return (
+        <div className="flex justify-center items-center min-h-screen">
+            <div className="w-full max-w-md p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl">
+                <div className="text-center">
+                    <TrophyIcon className="w-12 h-12 text-amber-400 mx-auto"/>
+                    <h2 className="mt-4 text-3xl font-bold text-white">
+                        {isLoginView ? 'Iniciar Sesión' : 'Crear Cuenta'}
+                    </h2>
+                    <p className="mt-2 text-sm text-gray-400">
+                        {isLoginView ? 'Bienvenido de nuevo a GalleraPro.' : 'Únete para empezar a gestionar tus torneos.'}
+                    </p>
+                </div>
 
-const AdminDashboard: React.FC<{ users: User[], currentUser: User, onDeleteUser: (userId: string) => void, onGoToApp: () => void, onAddUser: (user: Omit<User, 'id'>, pass: string) => void; }> = ({ users, currentUser, onDeleteUser, onGoToApp, onAddUser }) => {
-    const [isUserModalOpen, setUserModalOpen] = useState(false);
+                <form className="space-y-6" onSubmit={handleSubmit}>
+                    {!isLoginView && (
+                        <>
+                            <InputField label="Nombre Completo" id="name" type="text" value={name} onChange={e => setName(e.target.value)} required disabled={isLoading} />
+                            <InputField label="Teléfono" id="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} required disabled={isLoading} />
+                        </>
+                    )}
+                    <InputField label="Correo Electrónico" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isLoading} />
+                    <InputField label="Contraseña" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required disabled={isLoading} />
+
+                    <div>
+                        <button type="submit" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-900 bg-amber-500 hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 disabled:bg-gray-500" disabled={isLoading}>
+                            {isLoading ? 'Cargando...' : (isLoginView ? 'Entrar' : 'Registrarse')}
+                        </button>
+                    </div>
+                </form>
+
+                <p className="text-sm text-center text-gray-400">
+                    {isLoginView ? '¿No tienes cuenta?' : '¿Ya tienes una cuenta?'}
+                    <button onClick={() => setIsLoginView(!isLoginView)} className="font-medium text-amber-400 hover:text-amber-300 ml-1">
+                        {isLoginView ? 'Regístrate' : 'Inicia sesión'}
+                    </button>
+                </p>
+            </div>
+        </div>
+    );
+};
+
+const AdminDashboard: React.FC<{
+    users: User[];
+    onAddUser: (name: string, phone: string, email: string, role: 'user' | 'demo') => Promise<void>;
+    showNotification: (message: string, type: Notification['type']) => void;
+    onBackToApp: () => void;
+}> = ({ users, onAddUser, showNotification, onBackToApp }) => {
+    const [isAddUserModalOpen, setAddUserModalOpen] = useState(false);
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'admin' | 'user' | 'demo'>('user');
+    const [role, setRole] = useState<'user' | 'demo'>('user');
 
-    const handleAddUserSubmit = (e: React.FormEvent) => {
+    const handleAddUserSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onAddUser({ name, phone, email, role }, password);
-        setUserModalOpen(false);
-        // Reset form
-        setName(''); setPhone(''); setEmail(''); setPassword(''); setRole('user');
-    }
-
-    const getRoleClass = (role: User['role']) => {
-        switch(role) {
-            case 'admin': return 'bg-amber-500 text-black';
-            case 'demo': return 'bg-blue-500 text-white';
-            default: return 'bg-gray-600';
+        try {
+            await onAddUser(name, phone, email, role);
+            showNotification(`Usuario ${role} creado con éxito.`, 'success');
+            setAddUserModalOpen(false);
+            setName(''); setPhone(''); setEmail(''); setRole('user');
+        } catch (error) {
+            showNotification('Error al crear usuario.', 'error');
         }
-    }
+    };
 
     return (
         <div className="space-y-8">
-            <div className="text-center">
-                <h2 className="text-2xl sm:text-3xl font-bold text-white">Panel de Administración</h2>
-                <p className="text-gray-400 mt-2">Gestiona los usuarios y datos del sistema.</p>
+            <div className="flex justify-between items-center">
+                 <div className="text-center sm:text-left">
+                    <h2 className="text-3xl font-bold text-white">Panel de Administrador</h2>
+                    <p className="text-gray-400 mt-2">Gestiona los usuarios de la aplicación.</p>
+                </div>
+                <button onClick={onBackToApp} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Volver a la App</button>
             </div>
 
-            <div className="flex justify-center space-x-4">
-                <button onClick={onGoToApp} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
-                    Ir al Cotejador
-                </button>
-            </div>
-
-            <SectionCard icon={<UsersIcon />} title="Usuarios Registrados" buttonText="Añadir Usuario" onButtonClick={() => setUserModalOpen(true)}>
-                {/* Desktop Table */}
-                <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-700/50 text-xs text-amber-400 uppercase">
+            <SectionCard 
+                icon={<UsersIcon/>} 
+                title="Usuarios Registrados" 
+                buttonText="Añadir Usuario" 
+                onButtonClick={() => setAddUserModalOpen(true)}
+            >
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-300">
+                        <thead className="text-xs text-amber-400 uppercase bg-gray-700/50">
                             <tr>
-                                <th className="px-4 py-2">Nombre</th>
-                                <th className="px-4 py-2">Email</th>
-                                <th className="px-4 py-2">Rol</th>
-                                <th className="px-4 py-2 text-center">Acciones</th>
+                                <th scope="col" className="px-4 py-3">Nombre</th>
+                                <th scope="col" className="px-4 py-3">Email</th>
+                                <th scope="col" className="px-4 py-3">Teléfono</th>
+                                <th scope="col" className="px-4 py-3">Rol</th>
                             </tr>
                         </thead>
                         <tbody>
                             {users.map(user => (
-                                <tr key={user.id} className="border-b border-gray-700">
-                                    <td className="px-4 py-3 font-medium text-white">{user.name}</td>
+                                <tr key={user.id} className="border-b border-gray-700 hover:bg-gray-700/30">
+                                    <td className="px-4 py-3 font-semibold text-white">{user.name}</td>
                                     <td className="px-4 py-3">{user.email}</td>
-                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${getRoleClass(user.role)}`}>{user.role}</span></td>
-                                    <td className="px-4 py-3 text-center">
-                                        {user.id !== currentUser.id && (
-                                            <button onClick={() => onDeleteUser(user.id)} className="text-red-500 hover:text-red-400 p-1">
-                                                <TrashIcon className="w-5 h-5"/>
-                                            </button>
-                                        )}
+                                    <td className="px-4 py-3">{user.phone}</td>
+                                    <td className="px-4 py-3">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
+                                            {user.role}
+                                        </span>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
-                {/* Mobile Cards */}
-                <div className="block md:hidden space-y-3">
-                    {users.map(user => (
-                        <div key={user.id} className="bg-gray-700/50 p-4 rounded-lg">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-bold text-white">{user.name}</p>
-                                    <p className="text-sm text-gray-400">{user.email}</p>
-                                </div>
-                                {user.id !== currentUser.id && (
-                                    <button onClick={() => onDeleteUser(user.id)} className="text-red-500 hover:text-red-400 p-1 flex-shrink-0">
-                                        <TrashIcon className="w-5 h-5"/>
-                                    </button>
-                                )}
-                            </div>
-                            <div className="mt-2">
-                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${getRoleClass(user.role)}`}>{user.role}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
             </SectionCard>
-
-            <Modal isOpen={isUserModalOpen} onClose={() => setUserModalOpen(false)} title="Añadir Nuevo Usuario">
+            
+            <Modal isOpen={isAddUserModalOpen} onClose={() => setAddUserModalOpen(false)} title="Añadir Nuevo Usuario">
                 <form onSubmit={handleAddUserSubmit} className="space-y-4">
-                     <InputField label="Nombre Completo" value={name} onChange={e => setName(e.target.value)} required />
-                     <InputField label="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} />
-                     <InputField label="Correo Electrónico" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                     <InputField label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                     <div>
+                    <InputField label="Nombre" value={name} onChange={e => setName(e.target.value)} required />
+                    <InputField label="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} required />
+                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                    <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
-                        <select value={role} onChange={e => setRole(e.target.value as 'admin'|'user'|'demo')} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
+                        <select value={role} onChange={e => setRole(e.target.value as 'user' | 'demo')} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2">
                             <option value="user">Usuario</option>
-                            <option value="admin">Administrador</option>
                             <option value="demo">Demo</option>
                         </select>
-                     </div>
+                    </div>
                      <div className="flex justify-end pt-4 space-x-2">
-                        <button type="button" onClick={() => setUserModalOpen(false)} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button>
-                        <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Añadir Usuario</button>
+                        <button type="button" onClick={() => setAddUserModalOpen(false)} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                        <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Crear Usuario</button>
                     </div>
                 </form>
             </Modal>
         </div>
-    )
-}
+    );
+};
 
-const DEFAULT_TORNEO: Torneo = {
-    name: 'Torneo Anual de la Candelaria',
+// --- MAIN APP COMPONENT ---
+const App: React.FC = () => {
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SETUP);
+  const [partidosCuerdas, setPartidosCuerdas] = useState<PartidoCuerda[]>([]);
+  const [gallos, setGallos] = useState<Gallo[]>([]);
+  const [peleas, setPeleas] = useState<Pelea[]>([]);
+  const [unpairedRoosters, setUnpairedRoosters] = useState<Gallo[]>([]);
+  const [torneo, setTorneo] = useState<Torneo>({
+    name: "Torneo de Amigos",
     date: new Date().toISOString().split('T')[0],
-    weightTolerance: 60,
+    weightTolerance: 50,
     ageToleranceMonths: 2,
-    fightDuration: 10,
+    fightDuration: 8,
+    exceptions: [],
     weightUnit: PesoUnit.GRAMS,
     rondas: { enabled: true, pointsForWin: 3, pointsForDraw: 1 },
-    exceptions: [],
+  });
+  const [isMatchmaking, setIsMatchmaking] = useState(false);
+
+  // Auth & User State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+
+  // Notifications
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const showNotification = (message: string, type: Notification['type'] = 'info') => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const populateInitialDataForUser = async (newUserId: string, newUserRole: 'user' | 'demo' | 'admin', newUserName: string) => {
+    const batch = writeBatch(db);
+
+    const ownerName = newUserRole === 'demo' ? 'Demo' : newUserName;
+
+    for (const data of DEMO_GALLERAS) {
+        const partidoRef = doc(collection(db, "partidosCuerdas"));
+        const partidoData = {
+            name: data.partidoName,
+            owner: ownerName,
+            userId: newUserId
+        };
+        batch.set(partidoRef, partidoData);
+
+        for (const galloData of data.gallos) {
+            const galloRef = doc(collection(db, "gallos"));
+            batch.set(galloRef, {
+                ringId: `R-${Math.floor(Math.random() * 9000) + 1000}`,
+                name: galloData.name,
+                partidoCuerdaId: partidoRef.id,
+                weight: galloData.weight,
+                weightUnit: PesoUnit.GRAMS,
+                ageMonths: galloData.ageMonths,
+                characteristics: "Gallo de demostración",
+                userId: newUserId,
+            });
+        }
+    }
+
+    try {
+        await batch.commit();
+        showNotification('Datos de demostración cargados exitosamente.', 'success');
+    } catch (error) {
+        console.error("Error populating demo data: ", error);
+        showNotification('Error al cargar datos de demostración.', 'error');
+    }
 };
 
 
-const App: React.FC = () => {
-    // --- AUTH STATE ---
-    const [users, setUsers] = useState<User[]>([]); // All users, for admin panel
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+  // --- AUTH EFFECTS & HANDLERS ---
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            const userDocRef = doc(db, "users", user.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+                const userData = userDoc.data() as User;
+                setCurrentUser({ ...userData, id: user.uid });
+                 // Set up listeners for this user's data
+                setupListeners(user.uid);
+                // Set tournament user ID
+                setTorneo(prev => ({...prev, userId: user.uid}));
+                 if (userData.role === 'admin') {
+                    setupAdminListeners();
+                }
 
-    // --- MAIN APP STATE (DATA FROM FIRESTORE) ---
-    const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
-    const [torneo, setTorneo] = useState<Torneo>(DEFAULT_TORNEO);
-    const [partidosCuerdas, setPartidosCuerdas] = useState<PartidoCuerda[]>([]);
-    const [gallos, setGallos] = useState<Gallo[]>([]);
+            } else {
+                // This case happens for a newly registered user before their doc is created.
+                // handleRegister will create the doc.
+            }
+        } else {
+            setCurrentUser(null);
+            setPartidosCuerdas([]);
+            setGallos([]);
+            setTorneo(prev => ({...prev, userId: undefined}));
+            // Clear all data
+        }
+        setIsLoadingUser(false);
+    });
+    return () => unsubscribe();
+}, []);
+
+
+  const setupListeners = (userId: string) => {
+    const partidosQuery = query(collection(db, "partidosCuerdas"), where("userId", "==", userId));
+    const gallosQuery = query(collection(db, "gallos"), where("userId", "==", userId));
+    const torneoQuery = doc(db, "torneos", userId);
+
+    const unsubPartidos = onSnapshot(partidosQuery, snapshot => {
+        setPartidosCuerdas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PartidoCuerda)));
+    });
+
+    const unsubGallos = onSnapshot(gallosQuery, snapshot => {
+        setGallos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Gallo)));
+    });
+
+    const unsubTorneo = onSnapshot(torneoQuery, (doc) => {
+        if (doc.exists()) {
+            const data = doc.data() as Torneo;
+            setTorneo(prev => ({
+                ...prev, 
+                ...data,
+                // Ensure nested objects have defaults if they don't exist in DB
+                rondas: data.rondas ?? prev.rondas,
+                ageToleranceMonths: data.ageToleranceMonths ?? prev.ageToleranceMonths,
+            }));
+        } else {
+            // If no tournament settings saved for user, create one.
+             setDoc(doc.ref, { ...torneo, userId });
+        }
+    });
+
+    return () => {
+        unsubPartidos();
+        unsubGallos();
+        unsubTorneo();
+    };
+  };
+
+  const setupAdminListeners = () => {
+    const usersQuery = query(collection(db, "users"));
+    const unsubUsers = onSnapshot(usersQuery, snapshot => {
+        setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+    });
+    return () => unsubUsers();
+  };
+
+
+  const handleLogin = async (email: string, pass: string) => {
+      await signInWithEmailAndPassword(auth, email, pass);
+  };
+  
+  const handleRegister = async (name: string, phone: string, email: string, pass: string) => {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+    const user = userCredential.user;
+    const userDocRef = doc(db, "users", user.uid);
+    await setDoc(userDocRef, { name, phone, email, role: 'user' });
+    setCurrentUser({ id: user.uid, name, phone, email, role: 'user' });
+    await populateInitialDataForUser(user.uid, 'user', name);
+  };
+  
+  const handleLogout = async () => {
+      await signOut(auth);
+      setCurrentScreen(Screen.LOGIN);
+  };
+
+  const handleAdminAddUser = async (name: string, phone: string, email: string, role: 'user' | 'demo' | 'admin') => {
+    // This function needs a temporary Firebase app instance to not conflict with current user session.
+    const tempApp = initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
+    const tempAuth = getAuth(tempApp);
     
-    // --- MATCHMAKING & FIGHT STATE (LOCAL) ---
-    const [peleas, setPeleas] = useState<Pelea[]>([]);
-    const [peleasIndividuales, setPeleasIndividuales] = useState<Pelea[]>([]);
-    const [unpairedRoosters, setUnpairedRoosters] = useState<Gallo[]>([]);
-    const [matchmakingNote, setMatchmakingNote] = useState('');
-    const [tournamentMetrics, setTournamentMetrics] = useState<{ contribution: number; fights: number; participants: number; } | null>(null);
-    const [individualMatchFailureReason, setIndividualMatchFailureReason] = useState<string | null>(null);
-    const [currentFightIndex, setCurrentFightIndex] = useState(0);
-    const [currentIndividualFightIndex, setCurrentIndividualFightIndex] = useState(0);
-    const [activeFightSet, setActiveFightSet] = useState<'main' | 'individual'>('main');
+    try {
+        const userCredential = await createUserWithEmailAndPassword(tempAuth, email, "123456"); // Default password
+        const user = userCredential.user;
+        const userDocRef = doc(db, "users", user.uid);
+        await setDoc(userDocRef, { name, phone, email, role });
 
-    // --- NOTIFICATION HANDLERS ---
-    const showNotification = useCallback((message: string, type: Notification['type'] = 'info') => {
-        const newNotification: Notification = { id: Date.now(), message, type };
-        setNotifications(prev => [...prev, newNotification]);
+        if (role === 'user' || role === 'demo' || role === 'admin') {
+            await populateInitialDataForUser(user.uid, role, name);
+        }
+        
+        showNotification(`Usuario creado con contraseña temporal '123456'.`, 'success');
+        
+    } catch (error: any) {
+        console.error("Error creating user from admin:", error);
+        if (error.code === 'auth/email-already-in-use') {
+            showNotification('El correo electrónico ya está en uso.', 'error');
+        } else {
+            showNotification('Error al crear usuario.', 'error');
+        }
+        throw error; // re-throw to be caught in component
+    } finally {
+        await signOut(tempAuth); // Sign out the temporary user
+    }
+  };
+
+  // --- DATA HANDLERS ---
+  const handleSavePartido = async (partidoData: Omit<PartidoCuerda, 'id' | 'userId'>, currentPartidoId: string | null) => {
+      if (!currentUser) return;
+      try {
+          if (currentPartidoId) {
+              const partidoRef = doc(db, "partidosCuerdas", currentPartidoId);
+              await updateDoc(partidoRef, partidoData);
+              showNotification('Partido actualizado.', 'success');
+          } else {
+              await addDoc(collection(db, "partidosCuerdas"), { ...partidoData, userId: currentUser.id });
+              showNotification('Partido añadido.', 'success');
+          }
+      } catch (error) {
+          showNotification('Error al guardar el partido.', 'error');
+      }
+  };
+
+  const handleDeletePartido = async (partidoId: string) => {
+      if (!window.confirm("¿Seguro que quieres eliminar este partido y todos sus gallos?")) return;
+      try {
+          const batch = writeBatch(db);
+          // Delete the partido
+          const partidoRef = doc(db, "partidosCuerdas", partidoId);
+          batch.delete(partidoRef);
+
+          // Find and delete all roosters in that partido
+          const gallosToDeleteQuery = query(collection(db, "gallos"), where("partidoCuerdaId", "==", partidoId), where("userId", "==", currentUser?.id));
+          const gallosToDeleteSnapshot = await getDocs(gallosToDeleteQuery);
+          gallosToDeleteSnapshot.forEach(doc => batch.delete(doc.ref));
+
+          await batch.commit();
+          showNotification('Partido y sus gallos eliminados.', 'success');
+      } catch (error) {
+           showNotification('Error al eliminar el partido.', 'error');
+      }
+  };
+
+  const handleSaveGallo = async (galloData: Omit<Gallo, 'id' | 'userId'>, currentGalloId: string | null) => {
+      if (!currentUser) return;
+      
+      try {
+          if (currentGalloId) {
+              const galloRef = doc(db, "gallos", currentGalloId);
+              await updateDoc(galloRef, galloData);
+              showNotification('Gallo actualizado.', 'success');
+          } else {
+              await addDoc(collection(db, "gallos"), { ...galloData, userId: currentUser.id });
+              showNotification('Gallo añadido.', 'success');
+          }
+      } catch (error) {
+           showNotification('Error al guardar el gallo.', 'error');
+      }
+  };
+
+  const handleDeleteGallo = async (galloId: string) => {
+      if (!window.confirm("¿Seguro que quieres eliminar este gallo?")) return;
+      try {
+        await deleteDoc(doc(db, "gallos", galloId));
+        showNotification('Gallo eliminado.', 'success');
+      } catch (error) {
+        showNotification('Error al eliminar el gallo.', 'error');
+      }
+  };
+  
+  const handleUpdateTorneo = (updatedTorneo: Torneo) => {
+      setTorneo(updatedTorneo);
+      if (currentUser?.id) {
+        const torneoRef = doc(db, "torneos", currentUser.id);
+        // Use setDoc with merge to create or update
+        setDoc(torneoRef, updatedTorneo, { merge: true });
+      }
+  };
+
+    const handleStartMatchmaking = async () => {
+        if (gallos.length < 2) {
+            showNotification("Se necesitan al menos 2 gallos para empezar.", 'error');
+            return;
+        }
+        setIsMatchmaking(true);
+    
+        // Use a timeout to allow the UI to update to the loading state before the computation starts
         setTimeout(() => {
-            handleDismissNotification(newNotification.id);
-        }, 5000);
-    }, []);
-
-    const handleDismissNotification = (id: number) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-    };
-
-    const populateInitialDataForUser = async (userId: string, newUser: Omit<User, 'id'>) => {
-        const batch = writeBatch(db);
-        const partidosRef = collection(db, "partidos");
-        const gallosRef = collection(db, "gallos");
-
-        const ownerName = newUser.role === 'demo' ? 'Demo' : newUser.name;
-        const ringPrefix = newUser.role === 'demo' ? 'D' : 'U';
-
-        for (const data of DEMO_GALLERAS) {
-            const newPartidoRef = doc(partidosRef);
-            
-            const partidoData: Omit<PartidoCuerda, 'id'> = {
-                name: data.partidoName,
-                owner: ownerName,
-                userId: userId,
-            };
-            batch.set(newPartidoRef, partidoData);
-
-            for (const gallo of data.gallos) {
-                const newGalloRef = doc(gallosRef);
-                const galloData: Omit<Gallo, 'id'> = {
-                    ringId: `${ringPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-                    name: gallo.name,
-                    partidoCuerdaId: newPartidoRef.id,
-                    weight: gallo.weight,
-                    weightUnit: PesoUnit.GRAMS,
-                    ageMonths: gallo.ageMonths,
-                    characteristics: "",
-                    userId: userId,
-                };
-                batch.set(newGalloRef, galloData);
-            }
-        }
-
-        try {
-            await batch.commit();
-            console.log(`Initial data populated successfully for user ${userId}`);
-            showNotification('Datos de ejemplo creados con éxito.', 'success');
-        } catch (error) {
-            console.error("Error populating initial data:", error);
-            showNotification('Error al crear los datos de ejemplo.', 'error');
-        }
-    };
-
-
-    // --- FIREBASE EFFECTS ---
-    useEffect(() => {
-        const setupAdmin = async () => {
-            const usersRef = collection(db, "users");
-            const adminQuery = query(usersRef, where("role", "==", "admin"));
-            const adminSnapshot = await getDocs(adminQuery);
-    
-            if (adminSnapshot.empty) {
-                console.log("No admin found, creating one...");
-                const adminEmail = "carlostecontacta@gmail.com";
-                const adminPassword = "C09203055";
-                
-                const tempApp = initializeApp(firebaseConfig, `admin-setup-${Date.now()}`);
-                const tempAuth = getAuth(tempApp);
-                
-                try {
-                    const userCredential = await createUserWithEmailAndPassword(tempAuth, adminEmail, adminPassword);
-                    const adminUser = userCredential.user;
-    
-                    const adminData: Omit<User, 'id'> = {
-                        name: "carlos",
-                        phone: "3197633335",
-                        email: adminEmail,
-                        role: 'admin',
-                    };
-                    
-                    await setDoc(doc(db, "users", adminUser.uid), adminData);
-                    console.log("Admin account created successfully.");
-    
-                } catch (error: any) {
-                    if (error.code !== 'auth/email-already-in-use') {
-                        console.error("Error creating admin user:", error);
-                    }
-                }
-            }
-        };
-    
-        setupAdmin();
-    }, []);
-
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                const userDocRef = doc(db, "users", user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (userDocSnap.exists()) {
-                     const userData = userDocSnap.data();
-                    setCurrentUser({ 
-                        id: user.uid,
-                        name: userData.name,
-                        phone: userData.phone,
-                        email: userData.email,
-                        role: userData.role
-                    });
-                    changeScreen(userData.role === 'admin' ? Screen.ADMIN_DASHBOARD : Screen.SETUP);
-                } else {
-                    console.error("User profile not found in Firestore.");
-                    await signOut(auth); // Log out if profile is missing
-                }
-            } else {
-                setCurrentUser(null);
-                // Clear all data when logged out
-                setTorneo(DEFAULT_TORNEO);
-                setPartidosCuerdas([]);
-                setGallos([]);
-                changeScreen(Screen.LOGIN);
-            }
-            setIsLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    useEffect(() => {
-        if (!currentUser) return;
-    
-        // Subscribe to Torneo data
-        const torneoDocRef = doc(db, "torneos", currentUser.id);
-        const unsubTorneo = onSnapshot(torneoDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const dataFromDb = docSnap.data();
-                // Merge with defaults to ensure new fields (like ageToleranceMonths) are present for older DB entries
-                setTorneo({ ...DEFAULT_TORNEO, ...dataFromDb });
-            } else {
-                // If no tournament settings exist for user, create with default
-                setDoc(torneoDocRef, { ...DEFAULT_TORNEO, userId: currentUser.id });
-            }
-        });
-    
-        // Subscribe to Partidos
-        const partidosQuery = query(collection(db, "partidos"), where("userId", "==", currentUser.id));
-        const unsubPartidos = onSnapshot(partidosQuery, (snapshot) => {
-            const partidosData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PartidoCuerda[];
-            setPartidosCuerdas(partidosData);
-        });
-    
-        // Subscribe to Gallos
-        const gallosQuery = query(collection(db, "gallos"), where("userId", "==", currentUser.id));
-        const unsubGallos = onSnapshot(gallosQuery, (snapshot) => {
-            const gallosData = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    // Ensure ageMonths has a default value for old rooster entries in DB
-                    ageMonths: data.ageMonths || 1,
-                } as Gallo;
-            });
-            setGallos(gallosData);
-        });
-
-        // Fetch all users for admin panel
-        if (currentUser.role === 'admin') {
-            const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-                const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as User[];
-                setUsers(allUsers);
-            });
-            return () => { unsubTorneo(); unsubPartidos(); unsubGallos(); unsubUsers(); };
-        }
-    
-        // Cleanup function
-        return () => {
-            unsubTorneo();
-            unsubPartidos();
-            unsubGallos();
-        };
-    }, [currentUser]);
-
-    
-    // Helper to change screen and scroll to top
-    const changeScreen = (screen: Screen) => {
-        setCurrentScreen(screen);
-        window.scrollTo(0, 0);
-    };
-
-    // --- AUTH HANDLERS ---
-    const handleLogin = async (email: string, pass: string) => {
-        if (!email || !pass) {
-            showNotification("Por favor, introduce tu correo y contraseña.", 'error');
-            return;
-        }
-        try {
-            await signInWithEmailAndPassword(auth, email, pass);
-            showNotification('Iniciando sesión...', 'success');
-        } catch (error: any) {
-            console.error("Error en el inicio de sesión:", error.code);
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                showNotification('El correo o la contraseña son incorrectos.', 'error');
-            } else {
-                showNotification('Ocurrió un error inesperado al iniciar sesión.', 'error');
-            }
-        }
-    };
-
-    const handleLogout = async () => {
-        await signOut(auth);
-        // onAuthStateChanged will handle the rest
-    };
-
-    // --- ADMIN & DATA HANDLERS ---
-    const handleAdminAddUser = async (newUser: Omit<User, 'id'>, password: string) => {
-        // Create a temporary secondary app to create a user without logging out the admin
-        const tempApp = initializeApp(firebaseConfig, `temp-app-${Date.now()}`);
-        const tempAuth = getAuth(tempApp);
-
-        try {
-            const userCredential = await createUserWithEmailAndPassword(tempAuth, newUser.email, password);
-            const newFirebaseUser = userCredential.user;
-            
-            // Now save the user profile in Firestore using the main app's db instance
-            await setDoc(doc(db, "users", newFirebaseUser.uid), newUser);
-            
-            if (newUser.role === 'demo' || newUser.role === 'user' || newUser.role === 'admin') {
-                await populateInitialDataForUser(newFirebaseUser.uid, newUser);
-            }
-
-            showNotification('Usuario añadido con éxito.', 'success');
-        } catch (error: any) {
-             if (error.code === 'auth/email-already-in-use') {
-                showNotification('El correo electrónico ya está en uso.', 'error');
-            } else {
-                showNotification('Error al crear usuario.', 'error');
-            }
-            console.error("Error creating user:", error);
-        }
-    };
-    
-    const handleAdminDeleteUser = async (userId: string) => {
-        // Note: Deleting a user from Auth requires the Admin SDK (backend).
-        // This will only delete them from the Firestore database.
-        try {
-            await deleteDoc(doc(db, "users", userId));
-            showNotification(`Usuario eliminado de la base de datos.`, 'success');
-        } catch (error) {
-            showNotification("Error al eliminar el usuario.", 'error');
-            console.error("Error deleting user doc:", error);
-        }
-    };
-
-    const handleUpdateTorneo = async (updatedTorneo: Torneo) => {
-        if (!currentUser) return;
-        const torneoDocRef = doc(db, "torneos", currentUser.id);
-        await setDoc(torneoDocRef, updatedTorneo, { merge: true });
-    };
-
-    const handleSavePartido = async (partidoData: Omit<PartidoCuerda, 'id' | 'userId'>, currentPartidoId: string | null) => {
-        if (!currentUser) return;
-        try {
-            if (currentPartidoId) {
-                await updateDoc(doc(db, "partidos", currentPartidoId), partidoData);
-            } else {
-                await addDoc(collection(db, "partidos"), { ...partidoData, userId: currentUser.id });
-            }
-            showNotification('Partido guardado con éxito.', 'success');
-        } catch (error) {
-            showNotification('Error al guardar el partido.', 'error');
-            console.error(error);
-        }
-    };
-
-    const handleDeletePartido = async (partidoId: string) => {
-        if (!currentUser) return;
-        const partido = partidosCuerdas.find(p => p.id === partidoId);
-        if (partido) {
             try {
-                const batch = writeBatch(db);
-                // Delete the partido
-                batch.delete(doc(db, "partidos", partidoId));
-                // Find and delete associated gallos
-                const gallosToDeleteQuery = query(collection(db, "gallos"), where("userId", "==", currentUser.id), where("partidoCuerdaId", "==", partidoId));
-                const gallosToDeleteSnapshot = await getDocs(gallosToDeleteQuery);
-                gallosToDeleteSnapshot.forEach(galloDoc => batch.delete(galloDoc.ref));
-                // Update exceptions in torneo
-                const updatedExceptions = torneo.exceptions
-                    .map(pair => pair.filter(id => id !== partidoId))
-                    .filter(pair => pair.length === 2) as string[][];
-                batch.update(doc(db, "torneos", currentUser.id), { exceptions: updatedExceptions });
-                
-                await batch.commit();
-                showNotification(`Partido '${partido.name}' y sus gallos eliminados.`, 'success');
+                let fightsForMainTournament: Pelea[] = [];
+                let roostersForIndividualMatches: Gallo[] = [];
+    
+                if (torneo.rondas.enabled) {
+                    const partidosConGallos = partidosCuerdas.filter(p => gallos.some(g => g.partidoCuerdaId === p.id && g.userId === currentUser?.id));
+                    if (partidosConGallos.length < 2) {
+                        showNotification("Se necesitan al menos 2 equipos con gallos para el cotejo por aporte.", 'error');
+                        setIsMatchmaking(false);
+                        return;
+                    }
+    
+                    const contributionSize = Math.min(...partidosConGallos.map(p => gallos.filter(g => g.partidoCuerdaId === p.id).length));
+                    
+                    const teamRoostersForMatching: Gallo[] = [];
+                    const teamRoosterIds = new Set<string>();
+    
+                    partidosConGallos.forEach(p => {
+                        const teamRoosters = gallos
+                            .filter(g => g.partidoCuerdaId === p.id)
+                            .sort((a, b) => convertToGrams(a.weight, a.weightUnit) - convertToGrams(b.weight, b.weightUnit));
+                        
+                        const selectedRoosters = teamRoosters.slice(0, contributionSize);
+                        teamRoostersForMatching.push(...selectedRoosters);
+                        selectedRoosters.forEach(r => teamRoosterIds.add(r.id));
+                    });
+                    
+                    const { fights, leftovers: unpairedFromTeamRound } = findMaximumPairsGreedy(teamRoostersForMatching, torneo);
+                    fightsForMainTournament = fights;
+    
+                    const roostersOutsideTeamSelection = gallos.filter(g => !teamRoosterIds.has(g.id));
+                    roostersForIndividualMatches = [...unpairedFromTeamRound, ...roostersOutsideTeamSelection];
+                } else {
+                    const { fights, leftovers } = findMaximumPairsGreedy(gallos, torneo);
+                    fightsForMainTournament = fights;
+                    roostersForIndividualMatches = leftovers;
+                }
+    
+                const finalFights = fightsForMainTournament.map((fight, index) => ({ ...fight, fightNumber: index + 1 }));
+                setPeleas(finalFights);
+                setUnpairedRoosters(roostersForIndividualMatches);
+                setCurrentScreen(Screen.MATCHMAKING);
+    
             } catch (error) {
-                showNotification('Error al eliminar el partido.', 'error');
-                console.error(error);
+                console.error("Error during matchmaking:", error);
+                showNotification("Ocurrió un error inesperado durante el cotejo.", "error");
+            } finally {
+                setIsMatchmaking(false);
             }
-        }
+        }, 50); // Small timeout to let loading state render
     };
 
-    const handleSaveGallo = async (galloData: Omit<Gallo, 'id'|'userId'>, currentGalloId: string | null) => {
-        if (!currentUser) return;
-
-        try {
-             if (currentGalloId) {
-                await updateDoc(doc(db, "gallos", currentGalloId), galloData);
-            } else {
-                await addDoc(collection(db, "gallos"), { ...galloData, userId: currentUser.id });
-            }
-            showNotification('Gallo guardado con éxito.', 'success');
-        } catch (error) {
-            showNotification('Error al guardar el gallo.', 'error');
-            console.error(error);
-        }
-    };
-    
-    const handleDeleteGallo = async (galloId: string) => {
-        const gallo = gallos.find(g => g.id === galloId);
-        if(gallo) {
-            await deleteDoc(doc(db, "gallos", galloId));
-            showNotification(`Gallo '${gallo.name}' eliminado.`, 'success');
-        }
-    };
-
-    // --- MAIN APP LOGIC ---
-    const handleStartMatchmaking = useCallback(() => {
-        setPeleas([]);
-        setPeleasIndividuales([]);
-        setUnpairedRoosters([]);
-        setMatchmakingNote('');
-        setTournamentMetrics(null);
-        setIndividualMatchFailureReason(null);
-    
-        const roostersByTeam = gallos.reduce((acc, g) => {
-            if (!acc[g.partidoCuerdaId]) acc[g.partidoCuerdaId] = [];
-            acc[g.partidoCuerdaId].push(g);
-            return acc;
-        }, {} as Record<string, Gallo[]>);
-    
-        const participatingTeamIds = Object.keys(roostersByTeam).filter(id => roostersByTeam[id].length > 0);
-        const participatingTeams = partidosCuerdas.filter(p => participatingTeamIds.includes(p.id));
-    
-        if (!torneo.rondas.enabled || participatingTeams.length < 2) {
-            const { fights, leftovers } = createFightPlan(gallos, torneo, { shuffle: false });
-            const numberedFights = fights.map((f, i) => ({ ...f, fightNumber: i + 1 }));
-            setPeleas(numberedFights);
-            setUnpairedRoosters(leftovers);
-            setMatchmakingNote(`Se generaron ${numberedFights.length} peleas en modo tradicional. Quedaron ${leftovers.length} gallos sin pareja.`);
-            changeScreen(Screen.MATCHMAKING);
-            return;
-        }
-    
-        const initialContribution = Math.min(...participatingTeams.map(p => roostersByTeam[p.id]?.length || 0));
-    
-        let finalContribution = initialContribution;
-        const potentialParticipants = participatingTeams.length * initialContribution;
+    const handleGenerateIndividualFights = (roosters: Gallo[]): Pelea[] => {
+        const { fights } = findMaximumPairsGreedy(roosters, torneo);
+        const pairedInIndividualRound = new Set(fights.flatMap(f => [f.roosterA.id, f.roosterB.id]));
         
-        if (potentialParticipants % 2 !== 0 && finalContribution > 0) {
-            finalContribution = initialContribution - 1;
-            setMatchmakingNote(`Nota: Para asegurar un número par de combatientes, se ajustó automáticamente la cantidad de gallos que cada equipo debe presentar, de ${initialContribution} a ${finalContribution}.`);
-        }
-    
-        const finalParticipantsCount = participatingTeams.length * finalContribution;
-        const fightsCount = finalParticipantsCount / 2;
-        
-        setTournamentMetrics({
-            contribution: finalContribution,
-            fights: fightsCount,
-            participants: finalParticipantsCount,
-        });
-    
-        const roostersForTournament: Gallo[] = [];
-        if (finalContribution > 0) {
-            participatingTeams.forEach(team => {
-                const sortedTeamRoosters = (roostersByTeam[team.id] || []).sort((a,b) => convertToGrams(a.weight, a.weightUnit) - convertToGrams(b.weight, b.weightUnit));
-                roostersForTournament.push(...sortedTeamRoosters.slice(0, finalContribution));
-            });
-        }
-    
-        const { fights } = createFightPlan(roostersForTournament, torneo);
-        const numberedFights = fights.map((f, i) => ({ ...f, fightNumber: i + 1 }));
-        setPeleas(numberedFights);
-        
-        const roosterIdsInFights = new Set(numberedFights.flatMap(f => [f.roosterA.id, f.roosterB.id]));
-        const allUnpaired = gallos.filter(g => !roosterIdsInFights.has(g.id));
-        setUnpairedRoosters(allUnpaired);
-    
-        changeScreen(Screen.MATCHMAKING);
-    
-    }, [gallos, torneo, partidosCuerdas]);
+        // Update the main unpaired list
+        setUnpairedRoosters(prev => prev.filter(r => !pairedInIndividualRound.has(r.id)));
 
-    const handleShuffleFights = useCallback(() => {
-        if (peleas.length === 0) return;
-
-        const tournamentRoosters = [...new Map(peleas.flatMap(p => [p.roosterA, p.roosterB]).map(r => [r.id, r])).values()];
-        if (tournamentRoosters.length < 2) return;
-
-        const { fights, leftovers } = createFightPlan(tournamentRoosters, torneo, { shuffle: true });
-        
-        if (leftovers.length > 0) {
-            console.error("Shuffling resulted in leftovers, this should not happen with the new algorithm. Reverting.");
-            showNotification("No se pudo barajar sin dejar gallos sueltos. Inténtelo de nuevo.", "error");
-            return; 
-        }
-        showNotification("Se han barajado las peleas con éxito.", "success");
-        const numberedFights = fights.map((f, i) => ({ ...f, fightNumber: i + 1 }));
-        setPeleas(numberedFights);
-    }, [peleas, torneo, showNotification]);
-
-    const handleGenerateIndividualFights = () => {
-        if (unpairedRoosters.length < 2) return;
-        setIndividualMatchFailureReason(null);
-
-        const { fights, leftovers } = findMaximumPairsGreedy(unpairedRoosters, torneo);
-
-        if (fights.length === 0) {
-            setIndividualMatchFailureReason('Sin parejas: revise peso o excepciones.');
-            return;
-        }
-
-        const lastTournamentFightNumber = peleas.length > 0 ? Math.max(...peleas.map(p => p.fightNumber)) : 0;
-        const lastIndividualFightNumber = peleasIndividuales.length > 0 ? Math.max(...peleasIndividuales.map(p => p.fightNumber)) : 0;
-        const lastFightNumber = Math.max(lastTournamentFightNumber, lastIndividualFightNumber);
-        
-        const numberedNewFights = fights.map((f, i) => ({ ...f, fightNumber: lastFightNumber + i + 1 }));
-
-        setPeleasIndividuales(prev => [...prev, ...numberedNewFights]);
-        setUnpairedRoosters(leftovers);
+        return fights.map((f, i) => ({...f, fightNumber: peleas.length + i + 1}));
     };
 
-    const resetTournament = () => {
-        setTorneo(DEFAULT_TORNEO);
-        setPeleas([]);
-        setPeleasIndividuales([]);
-        setUnpairedRoosters([]);
-        setMatchmakingNote('');
-        setTournamentMetrics(null);
-        setIndividualMatchFailureReason(null);
-        setCurrentFightIndex(0);
-        setCurrentIndividualFightIndex(0);
-        setActiveFightSet('main');
-        changeScreen(Screen.SETUP);
-    };
+  const handleFinishFight = (fightId: string, winner: 'A' | 'B' | 'DRAW', duration: number) => {
+      setPeleas(prev => prev.map(p => p.id === fightId ? { ...p, winner, duration } : p));
+  };
+  
+  const handleReset = () => {
+    setCurrentScreen(Screen.SETUP);
+    setPeleas([]);
+    setUnpairedRoosters([]);
+  };
 
-    const startTournamentFights = () => {
-        if (peleas.length === 0) return;
-        setActiveFightSet('main');
-        changeScreen(Screen.LIVE_FIGHT);
-    };
-
-    const startIndividualFights = () => {
-        if (peleasIndividuales.length === 0) return;
-        setActiveFightSet('individual');
-        changeScreen(Screen.LIVE_FIGHT);
-    };
-
-    const handleFinishFights = () => {
-        changeScreen(Screen.RESULTS);
-    };
-
-    const renderMainApp = () => {
-        switch (currentScreen) {
-            case Screen.ADMIN_DASHBOARD:
-                return <AdminDashboard users={users} currentUser={currentUser!} onDeleteUser={handleAdminDeleteUser} onGoToApp={() => changeScreen(Screen.SETUP)} onAddUser={handleAdminAddUser} />;
-            case Screen.SETUP:
-                return <SetupScreen 
-                    partidosCuerdas={partidosCuerdas} 
-                    gallos={gallos} 
-                    torneo={torneo} 
-                    onUpdateTorneo={handleUpdateTorneo} 
-                    onStartMatchmaking={handleStartMatchmaking} 
+  const renderScreen = () => {
+    switch(currentScreen) {
+      case Screen.MATCHMAKING:
+        return <MatchmakingScreen 
+                    peleas={peleas}
+                    unpairedRoosters={unpairedRoosters}
+                    torneo={torneo}
+                    partidosCuerdas={partidosCuerdas}
+                    onStartTournament={() => setCurrentScreen(Screen.LIVE_FIGHT)}
+                    onBack={() => setCurrentScreen(Screen.SETUP)}
+                    onGenerateIndividualFights={handleGenerateIndividualFights}
+               />;
+      case Screen.LIVE_FIGHT:
+        return <LiveFightScreen 
+                    peleas={peleas.filter(p => p.winner === null)} 
+                    torneo={torneo}
+                    partidosCuerdas={partidosCuerdas}
+                    onFinishFight={handleFinishFight}
+                    onFinishTournament={() => setCurrentScreen(Screen.RESULTS)}
+               />;
+      case Screen.RESULTS:
+        return <ResultsScreen peleas={peleas} torneo={torneo} partidosCuerdas={partidosCuerdas} onReset={handleReset} />;
+      case Screen.ADMIN_DASHBOARD:
+        return <AdminDashboard users={allUsers} onAddUser={handleAdminAddUser} showNotification={showNotification} onBackToApp={() => setCurrentScreen(Screen.SETUP)} />;
+      case Screen.LOGIN:
+         return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} showNotification={showNotification}/>;
+      case Screen.SETUP:
+      default:
+        return <SetupScreen 
+                    partidosCuerdas={partidosCuerdas}
+                    gallos={gallos}
+                    torneo={torneo}
+                    onUpdateTorneo={handleUpdateTorneo}
+                    onStartMatchmaking={handleStartMatchmaking}
                     showNotification={showNotification}
                     onSavePartido={handleSavePartido}
                     onDeletePartido={handleDeletePartido}
                     onSaveGallo={handleSaveGallo}
                     onDeleteGallo={handleDeleteGallo}
+                    isMatchmaking={isMatchmaking}
                 />;
-            case Screen.MATCHMAKING:
-                return <MatchmakingScreen torneo={torneo} partidosCuerdas={partidosCuerdas} onStartTournament={startTournamentFights} onBackToSetup={() => changeScreen(Screen.SETUP)} peleas={peleas} peleasIndividuales={peleasIndividuales} unpairedRoosters={unpairedRoosters} matchmakingNote={matchmakingNote} tournamentMetrics={tournamentMetrics} onShuffleFights={handleShuffleFights} onGenerateIndividualFights={handleGenerateIndividualFights} individualMatchFailureReason={individualMatchFailureReason} />;
-            case Screen.LIVE_FIGHT:
-                 const isIndividual = activeFightSet === 'individual';
-                 const props = { peleas: isIndividual ? peleasIndividuales : peleas, partidos: partidosCuerdas, currentFightIndex: isIndividual ? currentIndividualFightIndex : currentFightIndex, setCurrentFightIndex: isIndividual ? setCurrentIndividualFightIndex : setCurrentFightIndex, setPeleas: isIndividual ? setPeleasIndividuales : setPeleas, onFinishTournament: handleFinishFights, torneo, fightSetTitle: isIndividual ? 'Peleas Individuales' : 'Torneo Principal' };
-                return <LiveFightScreen {...props} />;
-            case Screen.RESULTS:
-                return <ResultsScreen peleas={peleas} peleasIndividuales={peleasIndividuales} partidos={partidosCuerdas} torneo={torneo} onNewTournament={resetTournament} onStartIndividualFights={startIndividualFights} />;
-            default:
-                // Fallback for logged in users if screen is invalid
-                return <SetupScreen 
-                    partidosCuerdas={partidosCuerdas} 
-                    gallos={gallos} 
-                    torneo={torneo} 
-                    onUpdateTorneo={handleUpdateTorneo} 
-                    onStartMatchmaking={handleStartMatchmaking} 
-                    showNotification={showNotification}
-                    onSavePartido={handleSavePartido}
-                    onDeletePartido={handleDeletePartido}
-                    onSaveGallo={handleSaveGallo}
-                    onDeleteGallo={handleDeleteGallo}
-                />;
-        }
-    };
-    
-    const renderAuthScreens = () => {
-         switch (currentScreen) {
-            case Screen.LOGIN:
-                return <LoginScreen onLogin={handleLogin} />;
-            default:
-                // If somehow on a non-auth screen while logged out, force login
-                return <LoginScreen onLogin={handleLogin} />;
-        }
     }
+  }
 
-    if (isLoading) {
-        return (
-             <div className="swirl-bg min-h-screen text-gray-200 flex items-center justify-center">
-                <TrophyIcon className="w-16 h-16 text-amber-400 animate-pulse" />
-            </div>
-        )
-    }
+  if (isLoadingUser) {
+    return <div className="swirl-bg min-h-screen flex justify-center items-center text-white text-xl">Cargando...</div>
+  }
 
-    return (
-        <div className="swirl-bg min-h-screen text-gray-200">
-            <Toaster notifications={notifications} onDismiss={handleDismissNotification} />
-            {currentUser && <Header currentUser={currentUser} onLogout={handleLogout} onGoToAdmin={() => changeScreen(Screen.ADMIN_DASHBOARD)} />}
-            <main className="container mx-auto px-4 py-8">
-                {currentUser ? renderMainApp() : renderAuthScreens()}
+  return (
+    <div className="swirl-bg text-white min-h-screen">
+       <Toaster notifications={notifications} onDismiss={(id) => setNotifications(n => n.filter(notif => notif.id !== id))} />
+      
+       {!currentUser ? (
+          <LoginScreen onLogin={handleLogin} onRegister={handleRegister} showNotification={showNotification} />
+       ) : (
+          <>
+            <Header currentUser={currentUser} onLogout={handleLogout} onGoToAdmin={() => setCurrentScreen(Screen.ADMIN_DASHBOARD)} />
+            <main className="container mx-auto p-4 sm:p-8">
+              {renderScreen()}
             </main>
-            {!currentUser && <Footer />}
-        </div>
-    );
+            <Footer />
+          </>
+       )}
+    </div>
+  );
 };
 
 export default App;
